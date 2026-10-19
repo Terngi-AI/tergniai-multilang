@@ -16,8 +16,10 @@ import httpx
 from fastapi import HTTPException
 
 import config
+import metrics
 from config import LLMProvider
 from services.keypool import key_pool, mask, retry_after_seconds
+from services.retry import RETRY_STATUS_CODES, retry_delay
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +69,39 @@ def render_morena_prompt(messages: List[Message]) -> str:
 
 
 async def _post(url: str, headers: Dict[str, str], body: Dict[str, Any]) -> httpx.Response:
-    try:
-        async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
-            return await client.post(url, headers=headers, json=body)
-    except httpx.HTTPError as e:
-        raise _ModelFailed(f"connection error: {type(e).__name__}") from e
+    """
+    POST with exponential-backoff retries for transient 5xx and connection errors.
+    429s are returned as-is: they are handled by rotating keys and models instead.
+    """
+    attempt = 0
+    async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
+        while True:
+            try:
+                response = await client.post(url, headers=headers, json=body)
+            except httpx.HTTPError as e:
+                delay = retry_delay(attempt, None) if isinstance(e, httpx.TransportError) else None
+                if delay is None or attempt >= config.UPSTREAM_MAX_RETRIES:
+                    raise _ModelFailed(f"connection error: {type(e).__name__}") from e
+                reason = type(e).__name__
+            else:
+                status = response.status_code
+                if status == 429 or status not in RETRY_STATUS_CODES:
+                    return response
+                delay = retry_delay(attempt, response)
+                if delay is None or attempt >= config.UPSTREAM_MAX_RETRIES:
+                    return response
+                reason = str(status)
+
+            attempt += 1
+            logger.warning(
+                "%s %s, retrying in %.2fs (retry %d/%d)",
+                url,
+                reason,
+                delay,
+                attempt,
+                config.UPSTREAM_MAX_RETRIES,
+            )
+            await asyncio.sleep(delay)
 
 
 def _check_status(response: httpx.Response, provider: str, key: Optional[str]) -> None:
@@ -220,16 +250,17 @@ async def complete_message(
                         soonest = wait if soonest is None else min(soonest, wait)
                         continue
                     try:
-                        message = await _call(
-                            provider,
-                            model,
-                            key,
-                            messages,
-                            json_mode,
-                            temperature,
-                            max_tokens,
-                            tools,
-                        )
+                        with metrics.track_upstream(name):
+                            message = await _call(
+                                provider,
+                                model,
+                                key,
+                                messages,
+                                json_mode,
+                                temperature,
+                                max_tokens,
+                                tools,
+                            )
                     except _KeyFailed as e:
                         if key:
                             key_pool.cool_down(key, e.cooldown, model if e.per_model else None)

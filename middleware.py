@@ -13,6 +13,7 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
 import config
+import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ PUBLIC_PATHS = {
     "/",
     "/health",
     "/health/ready",
+    "/metrics",
     "/v1/languages",
     "/docs",
     "/redoc",
@@ -88,15 +90,28 @@ def _valid_api_key(candidate: Optional[str]) -> bool:
     return any(hmac.compare_digest(candidate, key) for key in config.API_KEYS)
 
 
+def _record_request(request: Request, status: int, elapsed: float) -> None:
+    method, route = metrics.method_label(request), metrics.route_label(request)
+    metrics.REQUESTS.labels(method, route, str(status)).inc()
+    metrics.REQUEST_LATENCY.labels(method, route).observe(elapsed)
+
+
 async def request_context(request: Request, call_next: CallNext) -> Response:
     """Attach a request ID and timing header to every response"""
     request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
     request.state.request_id = request_id
     start = time.perf_counter()
 
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception:
+        # Unhandled errors become a 500 further out; count them before re-raising
+        _record_request(request, 500, time.perf_counter() - start)
+        raise
 
-    elapsed_ms = (time.perf_counter() - start) * 1000
+    elapsed = time.perf_counter() - start
+    elapsed_ms = elapsed * 1000
+    _record_request(request, response.status_code, elapsed)
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Process-Time-Ms"] = f"{elapsed_ms:.1f}"
     logger.info(
@@ -130,6 +145,7 @@ async def rate_limit(request: Request, call_next: CallNext) -> Response:
     }
     if not allowed:
         headers["Retry-After"] = str(max(1, int(retry_after + 0.999)))
+        metrics.RATE_LIMITED.inc()
         return error_response(429, "Rate limit exceeded, please slow down", headers)
 
     response = await call_next(request)

@@ -11,6 +11,7 @@ from typing import Awaitable, Callable, List, Optional, Sequence, Tuple, TypeVar
 from fastapi import HTTPException
 
 import config
+import metrics
 from services import assistant, azure_translator
 from services.cache import TTLCache
 
@@ -94,6 +95,8 @@ async def translate_batch(texts: List[str], from_language: str, to_language: str
         translation_cache.get((from_language, to_language, text)) for text in texts
     ]
     missing = [i for i, result in enumerate(results) if result is None]
+    metrics.CACHE_LOOKUPS.labels("hit").inc(len(texts) - len(missing))
+    metrics.CACHE_LOOKUPS.labels("miss").inc(len(missing))
 
     if missing:
         pending = [texts[i] for i in missing]

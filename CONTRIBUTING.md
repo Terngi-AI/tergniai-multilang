@@ -42,9 +42,20 @@ uvicorn main:app --reload
 
 The test suite mocks Azure and Groq, so **you do not need API keys to run tests**.
 
+## Branches
+
+| Branch | Purpose |
+|---|---|
+| `main` | Stable, released code. Only updated by release PRs from `develop`. |
+| `develop` | Integration branch. **Open your pull requests against `develop`.** |
+| `feat/…`, `fix/…`, `docs/…`, `chore/…` | Your work, branched from `develop`. |
+
+Both `main` and `develop` are protected: changes go through pull requests, CI must pass, and a
+maintainer must approve.
+
 ## Making a change
 
-1. Create a branch from `main`: `git checkout -b fix/short-description`.
+1. Create a branch from `develop`: `git checkout develop && git pull && git checkout -b fix/short-description`.
 2. Make your change, keeping it focused on one thing.
 3. Add or update tests in `tests/`.
 4. Run the checks:
@@ -57,9 +68,9 @@ The test suite mocks Azure and Groq, so **you do not need API keys to run tests*
 
 5. Commit using clear messages. We follow [Conventional Commits](https://www.conventionalcommits.org/)
    (e.g. `feat: add Pidgin support`, `fix: handle empty Azure response`).
-6. Push and open a pull request against `main`, filling in the PR template.
+6. Push and open a pull request against `develop`, filling in the PR template.
 
-> `main` is protected: every change goes through a pull request, all CI checks must
+> `main` and `develop` are protected: every change goes through a pull request, all CI checks must
 > pass, and a maintainer must approve the PR before it can be merged. For first-time
 > contributors, a maintainer also approves the CI run before it starts.
 

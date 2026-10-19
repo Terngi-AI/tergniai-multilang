@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Prometheus metrics at `GET /metrics`: requests by route and status, latency, upstream
+  calls per provider, translation cache hits/misses and rate-limited requests (#35).
+- Retries with exponential backoff and jitter for transient upstream errors, honouring
+  `Retry-After` (`UPSTREAM_MAX_RETRIES`, `UPSTREAM_RETRY_BASE_DELAY`,
+  `UPSTREAM_RETRY_MAX_DELAY`) (#34).
 - **Conversational chat** (`POST /v1/chat`) with server-side memory (`conversation_id`),
   `GET`/`DELETE /v1/chat/{id}`, and a web chat page at `/chat`. The assistant is now a general
   AI that chats about anything, not just translation.
@@ -39,6 +44,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `GROQ_SYSTEM_PROMPT` is now `SYSTEM_PROMPT`.
 
 ### Fixed
+- Translation results were cached in two places after #32 landed on top of #34/#35, so stale
+  translations leaked between requests and 26 tests failed on `develop`. There is now one cache.
+- Unhandled exceptions are counted as `500` in the request metrics.
 - Translation endpoints no longer fail entirely when the Azure key is missing or invalid.
 - The assistant identifies itself as Terngi AI instead of the underlying model.
 

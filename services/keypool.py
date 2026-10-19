@@ -6,6 +6,8 @@ import time
 from collections import defaultdict
 from typing import Dict, Iterable, List, Optional
 
+from services.retry import parse_retry_after
+
 
 def mask(key: str) -> str:
     """Safe representation of a key for logs"""
@@ -59,8 +61,6 @@ key_pool = KeyPool()
 
 
 def retry_after_seconds(value: Optional[str], default: float) -> float:
-    """Parse a Retry-After header (seconds form), falling back to `default`"""
-    try:
-        return float(value) if value else default
-    except ValueError:
-        return default
+    """Parse a Retry-After header (seconds or HTTP-date), falling back to `default`"""
+    parsed = parse_retry_after(value)
+    return default if parsed is None else parsed

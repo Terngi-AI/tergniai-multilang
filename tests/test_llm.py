@@ -166,7 +166,8 @@ async def test_all_providers_failing_returns_502(providers):
         await assistant.get_response("hi")
 
     assert exc_info.value.status_code == 502
-    assert route.call_count == 2  # one attempt per model, not per key
+    # Each model gets the first try plus UPSTREAM_MAX_RETRIES; keys aren't retried for a 5xx
+    assert route.call_count == 2 * (1 + config.UPSTREAM_MAX_RETRIES)
 
 
 async def test_unconfigured_providers_return_503(providers):

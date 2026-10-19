@@ -263,6 +263,13 @@ RATE_LIMIT_MAX_WAIT_SECONDS = float(os.getenv("RATE_LIMIT_MAX_WAIT_SECONDS", "10
 # Timeout (seconds) for calls to upstream services
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "30"))
 
+# Retries for upstream 429/5xx responses and connection errors (0 disables).
+# Backoff is exponential with full jitter; a Retry-After header is honoured.
+UPSTREAM_MAX_RETRIES = int(os.getenv("UPSTREAM_MAX_RETRIES", "2"))
+UPSTREAM_RETRY_BASE_DELAY = float(os.getenv("UPSTREAM_RETRY_BASE_DELAY", "0.5"))
+# Longest single wait (seconds). A Retry-After above this fails fast instead.
+UPSTREAM_RETRY_MAX_DELAY = float(os.getenv("UPSTREAM_RETRY_MAX_DELAY", "10"))
+
 # Request limits
 MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", "5000"))
 MAX_MEMORY_MESSAGES = int(os.getenv("MAX_MEMORY_MESSAGES", "20"))
