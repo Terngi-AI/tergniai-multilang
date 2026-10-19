@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from groq import AsyncGroq
 
 import config
+import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,13 @@ def get_client() -> AsyncGroq:
     if _groq_client is None:
         if not config.GROQ_API_KEY:
             raise HTTPException(status_code=503, detail="Language model service is not configured")
-        _groq_client = AsyncGroq(api_key=config.GROQ_API_KEY, timeout=config.REQUEST_TIMEOUT)
+        # The SDK retries 408/409/429/5xx and connection errors itself, with
+        # exponential backoff, jitter and Retry-After support.
+        _groq_client = AsyncGroq(
+            api_key=config.GROQ_API_KEY,
+            timeout=config.REQUEST_TIMEOUT,
+            max_retries=config.UPSTREAM_MAX_RETRIES,
+        )
     return _groq_client
 
 
@@ -56,12 +63,13 @@ async def get_response(content: str, memory_context: Optional[List[Dict[str, Any
 
     # Call Groq API
     try:
-        completion = await client.chat.completions.create(
-            model=config.GROQ_MODEL,
-            messages=messages,  # type: ignore[arg-type]
-            temperature=0.7,
-            max_tokens=1024,
-        )
+        with metrics.track_upstream("groq"):
+            completion = await client.chat.completions.create(
+                model=config.GROQ_MODEL,
+                messages=messages,  # type: ignore[arg-type]
+                temperature=0.7,
+                max_tokens=1024,
+            )
     except Exception as e:
         logger.exception("Error calling Groq")
         raise HTTPException(

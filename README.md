@@ -77,6 +77,9 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `TRANSLATION_PROVIDER` | no | `auto` | `auto` (Azure, falling back to Groq), `azure` or `groq` |
 | `GROQ_MODEL` | no | `openai/gpt-oss-120b` | Groq model ID |
 | `REQUEST_TIMEOUT` | no | `30` | Upstream timeout in seconds |
+| `UPSTREAM_MAX_RETRIES` | no | `2` | Retries for upstream `429`/`5xx`/connection errors (Azure and Groq); `0` disables |
+| `UPSTREAM_RETRY_BASE_DELAY` | no | `0.5` | First backoff step in seconds; doubles each retry, with full jitter (Azure) |
+| `UPSTREAM_RETRY_MAX_DELAY` | no | `10` | Longest wait between retries; a longer `Retry-After` fails fast (Azure) |
 | `MAX_CONTENT_LENGTH` | no | `5000` | Max characters per message |
 | `MAX_MEMORY_MESSAGES` | no | `20` | Max turns in `memory_context` |
 | `API_KEYS` | no | *(auth disabled)* | Comma-separated client keys accepted in `X-API-Key` |
@@ -100,6 +103,7 @@ key return `503`.
 | `GET` | `/` | API info and supported languages |
 | `GET` | `/health` | Liveness probe |
 | `GET` | `/health/ready` | Readiness probe (are upstream keys configured?) |
+| `GET` | `/metrics` | Prometheus metrics |
 | `GET` | `/v1/languages` | Supported language codes |
 | `POST` | `/v1/translate` | Translate text |
 | `POST` | `/v1/translate/batch` | Translate up to 25 texts in one request |
@@ -115,6 +119,24 @@ When `API_KEYS` is set, every `/v1/*` endpoint except `/v1/languages` requires a
 
 > The cache and rate limiter are in-memory, so each server process keeps its own state.
 > Run behind a shared limiter (e.g. your API gateway) if you scale out to many replicas.
+
+### Metrics
+
+`GET /metrics` serves Prometheus metrics. Like the health checks, it needs no API key
+and isn't rate limited, so keep it off the public internet (for example, only expose it on
+your internal network or block it at the reverse proxy).
+
+| Metric | Labels | Description |
+|---|---|---|
+| `terngi_http_requests_total` | `method`, `route`, `status` | Requests handled, including `401`/`429` rejections |
+| `terngi_http_request_duration_seconds` | `method`, `route` | Request latency histogram |
+| `terngi_upstream_requests_total` | `service` (`azure`/`groq`), `outcome` (`success`/`error`) | Upstream calls |
+| `terngi_upstream_request_duration_seconds` | `service` | Upstream latency histogram |
+| `terngi_translation_cache_lookups_total` | `result` (`hit`/`miss`) | Translation cache lookups, one per text |
+| `terngi_rate_limited_requests_total` | — | Requests rejected by the rate limiter |
+
+`route` is the route template (e.g. `/v1/translate`), or `unmatched` for unknown paths,
+so label values stay bounded. Metrics are per process, like the cache and rate limiter.
 
 ### Translate
 
