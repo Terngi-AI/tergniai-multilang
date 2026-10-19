@@ -90,8 +90,20 @@ class RateLimiter:
 rate_limiter = RateLimiter(limit=config.RATE_LIMIT_PER_MINUTE)
 
 
+def _fingerprint(api_key: str) -> str:
+    """Hash keys so raw API keys are never used as dictionary keys or stored in memory"""
+    return hashlib.sha256(api_key.encode()).hexdigest()[:32]
+
+
+def _ip(request: Request) -> str:
+    return f"ip:{request.client.host if request.client else 'unknown'}"
+
+
 def client_id(request: Request) -> str:
-    """Identify the caller by API key if present, otherwise by IP address"""
+    """
+    Identify the caller for ownership (e.g. chat conversations): the X-API-Key header if
+    sent, otherwise the IP address. Sending a key can only narrow access, never widen it.
+    """
     api_key = request.headers.get("x-api-key")
     if api_key:
         # Internal identifier, never sent in a response (Semgrep's Flask XSS rule misfires)
@@ -166,7 +178,7 @@ async def rate_limit(request: Request, call_next: CallNext) -> Response:
     if rate_limiter.limit <= 0 or request.url.path in PUBLIC_PATHS or request.method == "OPTIONS":
         return await call_next(request)
 
-    allowed, remaining, retry_after = rate_limiter.hit(client_id(request))
+    allowed, remaining, retry_after = rate_limiter.hit(rate_limit_id(request))
     headers = {
         "X-RateLimit-Limit": str(rate_limiter.limit),
         "X-RateLimit-Remaining": str(remaining),
