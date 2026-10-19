@@ -42,7 +42,7 @@ Other OpenAI-compatible providers work the same way. Add the name to `LLM_PROVID
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install --require-hashes -r requirements.lock
+pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
