@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Groq LLM translation and language detection, with automatic fallback when Azure Translator
+  is not configured or fails. `TRANSLATION_PROVIDER` selects `auto`, `azure` or `groq`.
+
+### Fixed
+- Translation endpoints no longer fail entirely when the Azure key is missing or invalid.
+- The assistant identifies itself as Terngi AI instead of the underlying model.
+
+## [1.0.0] - 2026-10-19
+
 ### Security
 - Removed hardcoded Azure and Groq API keys; configuration now comes from environment variables.
 - Upstream error details are logged instead of returned to clients.

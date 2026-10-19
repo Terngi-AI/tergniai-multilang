@@ -15,8 +15,8 @@ from models import (
     TranslationRequest,
     TranslationResponse,
 )
-from services.azure_translator import detect_language, translate_batch, translate_text
 from services.languages import resolve_source_language, validate_language
+from services.translator import detect_language, translate_batch, translate_text
 
 logger = logging.getLogger(__name__)
 

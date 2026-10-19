@@ -5,7 +5,7 @@ Language validation helpers shared by the routes
 from fastapi import HTTPException
 
 from config import SUPPORTED_LANGUAGES
-from services.azure_translator import detect_language
+from services.translator import detect_language
 
 AUTO = "auto"
 
