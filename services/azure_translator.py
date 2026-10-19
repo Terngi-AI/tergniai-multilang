@@ -14,6 +14,14 @@ from services.keypool import key_pool, mask, retry_after_seconds
 
 logger = logging.getLogger(__name__)
 
+# Supported languages that Azure Translator does not offer; requests involving them skip Azure
+UNSUPPORTED_LANGUAGES = {"pcm", "nr", "om", "lg", "ny", "rn", "wo", "ff", "ee", "tw"}
+
+
+def supports(*languages: str) -> bool:
+    """Whether Azure Translator can translate between these languages"""
+    return not UNSUPPORTED_LANGUAGES.intersection(languages)
+
 
 async def _call_azure(path: str, params: Dict[str, str], texts: List[str]) -> Any:
     """

@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Conversational chat** (`POST /v1/chat`) with server-side memory (`conversation_id`),
+  `GET`/`DELETE /v1/chat/{id}`, and a web chat page at `/chat`. The assistant is now a general
+  AI that chats about anything, not just translation.
+- **96 languages**: 27 African plus European, Middle Eastern and Asian languages
+  (Arabic, Chinese, Spanish, Polish, Dutch, Irish, Hindi, Japanese, …). Providers can be
+  limited to certain languages (`<NAME>_LANGUAGES`); MORENA only handles its own 14.
+- When every model is rate-limited, requests wait briefly (`RATE_LIMIT_MAX_WAIT_SECONDS`)
+  instead of failing. Rate limits now cool down a key only for the model that hit them.
+- Detected language codes are normalised (e.g. `zh` → `zh-Hans`, `no` → `nb`).
+- **Multilingual agent** (`POST /v1/agent`): a tool-calling model that understands any
+  supported language, uses `translate`, `detect_language`, `list_languages` and
+  `get_current_time`, and answers in the user's (or a chosen) language. Answers are
+  checked to be in the reply language. Configure with `AGENT_PROVIDERS` / `AGENT_MAX_STEPS`.
+- All of MORENA's languages: French, Swahili, Kinyarwanda, Shona, isiZulu, isiXhosa,
+  Setswana, Afrikaans and isiNdebele. Azure is skipped for languages it doesn't offer.
+- `docs/USAGE.md` (curl, Python, JavaScript examples) and `docs/AGENT.md`.
 - **Multiple providers, models and keys.** Any OpenAI-compatible API (Groq, OpenRouter,
   Together, Cerebras, Hugging Face, OpenAI, Ollama, or a custom URL) via `LLM_PROVIDERS`,
   `<NAME>_API_KEYS`, `<NAME>_MODELS` and `<NAME>_BASE_URL`. Keys rotate; rejected or

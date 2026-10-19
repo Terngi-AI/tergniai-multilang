@@ -122,7 +122,8 @@ async def detect_language(content: str, provider: str) -> Tuple[str, float]:
     known = ", ".join(f"{code} = {name}" for code, name in config.SUPPORTED_LANGUAGES.items())
     system = (
         "Identify the language of the user's text. Use one of these codes when it matches "
-        f"({known}); Nigerian Pidgin is 'pcm', not English. Otherwise use the ISO 639 code. "
+        f"({known}). Nigerian Pidgin is 'pcm', not English; isiNdebele is 'nr' and isiZulu is 'zu'. "
+        "Otherwise use the ISO 639 code. "
         'Reply only with a JSON object: {"language": "<code>", "score": <confidence 0-1>}'
     )
 

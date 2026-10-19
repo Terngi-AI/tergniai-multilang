@@ -41,9 +41,9 @@ def test_detect_supported_language(client):
 
 @respx.mock
 def test_detect_unsupported_language(client):
-    respx.post(DETECT_URL).mock(return_value=azure_detected("fr"))
+    respx.post(DETECT_URL).mock(return_value=azure_detected("tlh-Latn"))
 
-    response = client.post("/v1/detect", json={"content": "Bonjour"})
+    response = client.post("/v1/detect", json={"content": "Guten Morgen"})
 
     assert response.status_code == 200
     assert response.json()["is_supported"] is False
@@ -67,11 +67,11 @@ def test_translate_auto_detects_source(client):
 
 @respx.mock
 def test_translate_auto_rejects_unsupported_detection(client):
-    respx.post(DETECT_URL).mock(return_value=azure_detected("fr"))
+    respx.post(DETECT_URL).mock(return_value=azure_detected("tlh-Latn"))
 
     response = client.post(
         "/v1/translate",
-        json={"content": "Bonjour", "from_language": "auto", "to_language": "en"},
+        json={"content": "Guten Morgen", "from_language": "auto", "to_language": "en"},
     )
 
     assert response.status_code == 400
@@ -254,7 +254,7 @@ def test_ready_when_configured(client):
     response = client.get("/health/ready")
 
     assert response.status_code == 200
-    assert response.json()["services"] == {"translator": True, "llm": True}
+    assert response.json()["services"] == {"translator": True, "llm": True, "agent": True}
 
 
 def test_not_ready_without_keys(client, monkeypatch):

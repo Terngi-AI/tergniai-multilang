@@ -15,7 +15,7 @@ import middleware
 from config import CORS_ORIGINS
 
 # Import routers
-from routes import base, conversation, translation
+from routes import agent, base, chat, conversation, translation
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -25,7 +25,7 @@ logging.basicConfig(
 # Initialize FastAPI app
 app = FastAPI(
     title="Terngi Translation API",
-    description="API for translating between English and Nigerian languages for Terngi API",
+    description="Translation, conversation and a multilingual AI agent for African languages",
     version="1.0.0",
 )
 
@@ -46,6 +46,8 @@ if CORS_ORIGINS:
 app.include_router(base.router)
 app.include_router(translation.router)
 app.include_router(conversation.router)
+app.include_router(agent.router)
+app.include_router(chat.router)
 
 
 @app.exception_handler(HTTPException)

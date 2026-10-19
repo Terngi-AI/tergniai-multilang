@@ -52,7 +52,7 @@ def test_translate_same_language_skips_azure(client):
 def test_translate_unsupported_language(client):
     response = client.post(
         "/v1/translate",
-        json={"content": "Hello", "from_language": "en", "to_language": "fr"},
+        json={"content": "Hello", "from_language": "en", "to_language": "tlh-Latn"},
     )
 
     assert response.status_code == 400

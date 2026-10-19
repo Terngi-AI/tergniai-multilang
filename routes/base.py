@@ -40,6 +40,7 @@ async def ready():
     services = {
         "translator": translation_available(),
         "llm": llm.is_configured(config.CHAT_PROVIDERS),
+        "agent": llm.is_configured(config.AGENT_PROVIDERS, kind="openai"),
     }
     is_ready = all(services.values())
     return JSONResponse(

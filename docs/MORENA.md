@@ -5,6 +5,9 @@ from scratch for twelve African languages, including **Hausa, Yoruba, Igbo and N
 plus English and French. It was built by Isheanesu Misi at [Vambo AI](https://huggingface.co/vamboai)
 and released under the **Apache 2.0** license, so commercial use is allowed.
 
+All twelve of its African languages are supported by Terngi AI. With MORENA configured, the
+[agent](AGENT.md) writes its answers in those languages through MORENA.
+
 Terngi AI can use it for translation (and chat) through a [llama.cpp](https://github.com/ggml-org/llama.cpp)
 server. It costs nothing to run: the 4-bit build is 0.9 GB and runs on an ordinary laptop CPU.
 

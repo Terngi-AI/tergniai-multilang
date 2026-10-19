@@ -20,6 +20,7 @@ CallNext = Callable[[Request], Awaitable[Response]]
 
 # Paths that never require an API key or count towards the rate limit
 PUBLIC_PATHS = {
+    "/chat",
     "/",
     "/health",
     "/health/ready",
@@ -72,7 +73,7 @@ class RateLimiter:
 rate_limiter = RateLimiter(limit=config.RATE_LIMIT_PER_MINUTE)
 
 
-def _client_id(request: Request) -> str:
+def client_id(request: Request) -> str:
     """Identify the caller by API key if present, otherwise by IP address"""
     api_key = request.headers.get("x-api-key")
     if api_key:
@@ -122,7 +123,7 @@ async def rate_limit(request: Request, call_next: CallNext) -> Response:
     if rate_limiter.limit <= 0 or request.url.path in PUBLIC_PATHS or request.method == "OPTIONS":
         return await call_next(request)
 
-    allowed, remaining, retry_after = rate_limiter.hit(_client_id(request))
+    allowed, remaining, retry_after = rate_limiter.hit(client_id(request))
     headers = {
         "X-RateLimit-Limit": str(rate_limiter.limit),
         "X-RateLimit-Remaining": str(remaining),

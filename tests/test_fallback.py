@@ -86,7 +86,7 @@ def test_no_provider_configured_returns_503(client, chain, monkeypatch):
 
     assert translate(client).status_code == 503
     ready = client.get("/health/ready").json()["services"]
-    assert ready == {"translator": False, "llm": False}
+    assert ready == {"translator": False, "llm": False, "agent": False}
 
 
 @respx.mock
@@ -173,3 +173,39 @@ def test_pidgin_translation(client, chain, monkeypatch):
     assert (
         "Nigerian Pidgin" in json.loads(route.calls.last.request.content)["messages"][0]["content"]
     )
+
+
+@respx.mock
+def test_azure_skipped_for_languages_it_does_not_support(client, chain):
+    azure = respx.post(TRANSLATE_URL)
+    respx.post(CHAT_URL).mock(return_value=chat_reply({"translations": ["Sawubona"]}))
+
+    response = translate(client, content="Hello", tgt="nr")
+
+    assert response.json()["translated_text"] == "Sawubona"
+    assert not azure.called
+
+
+@respx.mock
+def test_azure_used_for_new_supported_languages(client, chain):
+    azure = respx.post(TRANSLATE_URL).mock(
+        return_value=httpx.Response(200, json=[{"translations": [{"text": "Habari"}]}])
+    )
+
+    assert translate(client, tgt="sw").json()["translated_text"] == "Habari"
+    assert azure.called
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("detected", "expected"),
+    [("zh-hans", "zh-Hans"), ("zh", "zh-Hans"), ("ZH-TW", "zh-Hant"), ("no", "nb"), ("tl", "fil")],
+)
+def test_detected_codes_are_normalised(client, chain, monkeypatch, detected, expected):
+    monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", [])
+    respx.post(CHAT_URL).mock(return_value=chat_reply({"language": detected, "score": 0.9}))
+
+    body = client.post("/v1/detect", json={"content": "text"}).json()
+
+    assert body["language"] == expected
+    assert body["is_supported"] is True
