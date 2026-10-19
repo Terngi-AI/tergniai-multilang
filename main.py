@@ -12,10 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 import middleware
-from config import CORS_ORIGINS
+from config import CORS_ORIGINS, MAX_REQUEST_BYTES
 
 # Import routers
-from routes import base, conversation, translation
+from routes import agent, base, chat, conversation, translation
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -25,14 +25,17 @@ logging.basicConfig(
 # Initialize FastAPI app
 app = FastAPI(
     title="Terngi Translation API",
-    description="API for translating between English and Nigerian languages for Terngi API",
+    description="Translation, conversation and a multilingual AI agent for African languages",
     version="1.0.0",
 )
 
-# Middleware runs in reverse order of registration: request context -> auth -> rate limit
+# Middleware runs in reverse order of registration:
+# body size limit -> security headers -> request context -> auth -> rate limit
 app.middleware("http")(middleware.rate_limit)
 app.middleware("http")(middleware.authenticate)
 app.middleware("http")(middleware.request_context)
+app.middleware("http")(middleware.security_headers)
+app.add_middleware(middleware.BodySizeLimitMiddleware, max_bytes=MAX_REQUEST_BYTES)
 
 if CORS_ORIGINS:
     app.add_middleware(
@@ -46,6 +49,8 @@ if CORS_ORIGINS:
 app.include_router(base.router)
 app.include_router(translation.router)
 app.include_router(conversation.router)
+app.include_router(agent.router)
+app.include_router(chat.router)
 
 
 @app.exception_handler(HTTPException)

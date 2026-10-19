@@ -1,0 +1,36 @@
+# Local stack: the API, plus MORENA (free African-language model) with:
+#   docker compose --profile morena up
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MORENA_BASE_URL: http://morena:8080
+    restart: unless-stopped
+
+  morena:
+    profiles: [morena]
+    image: ghcr.io/ggml-org/llama.cpp:server
+    command:
+      - --hf-repo
+      - vamboai/morena-1.5b-instruct-gguf
+      - --hf-file
+      - morena-1.5b-instruct-Q4_K_M.gguf
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - -c
+      - "4096"
+    volumes:
+      - morena-models:/root/.cache/llama.cpp
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+volumes:
+  morena-models:

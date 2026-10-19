@@ -1,6 +1,8 @@
 # Terngi AI — Translation & Conversation API
 
 [![CI](https://github.com/Terngi-AI/tergniai-multilang/actions/workflows/ci.yml/badge.svg)](https://github.com/Terngi-AI/tergniai-multilang/actions/workflows/ci.yml)
+[![Security](https://github.com/Terngi-AI/tergniai-multilang/actions/workflows/security.yml/badge.svg)](https://github.com/Terngi-AI/tergniai-multilang/actions/workflows/security.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Terngi-AI/tergniai-multilang/badge)](https://scorecard.dev/viewer/?uri=github.com/Terngi-AI/tergniai-multilang)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -9,10 +11,14 @@
 
 **Open-source translation and AI conversation for Nigerian languages.**
 
-A FastAPI service that translates between **English, Yoruba, Hausa and Igbo** and holds
-multilingual conversations with an LLM. Translation is powered by
-[Azure Translator](https://learn.microsoft.com/azure/ai-services/translator/) and responses
-by [Groq](https://groq.com/) (`openai/gpt-oss-120b` by default).
+A **conversational AI** and translation API for **96 languages**, built
+African-first: Yoruba, Hausa, Igbo, Nigerian Pidgin, Swahili, Amharic, isiZulu and 20 more
+African languages, plus Arabic, Chinese, Spanish, French, Hindi, Japanese, Polish, Dutch, Irish
+and the other major world languages. It can use several providers at once:
+[Azure Translator](https://learn.microsoft.com/azure/ai-services/translator/),
+[Groq](https://groq.com/) or any OpenAI-compatible API, and
+[MORENA](https://huggingface.co/vamboai/morena-1.5b-instruct), an open African-language model
+you can run for free.
 
 ## Why this project?
 
@@ -25,11 +31,20 @@ built in the open so native speakers and developers can improve it together.
 
 ## Features
 
+- **Chat like any AI assistant**: `/v1/chat` and a built-in web chat at `/chat`. Talk about
+  anything in any supported language; it remembers the conversation and you can switch
+  languages mid-chat
+- **AI agent** (`/v1/agent`) that uses tools (translation, language detection, time) behind
+  the scenes, see [docs/AGENT.md](docs/AGENT.md)
+- **Multiple providers, models and keys** — Azure, Groq, OpenRouter, Together, Cerebras,
+  Hugging Face, Ollama or MORENA, tried in order; keys rotate and failing keys, models or
+  providers are skipped automatically
+- **Free, local African-language model** — run [MORENA](docs/MORENA.md) with llama.cpp
 - **Translate** text between any two supported languages, one at a time or in batches
 - **Auto-detect** the source language — pass `"from_language": "auto"` to any endpoint
 - **Converse** in any supported language; the reply comes back in the target language,
   with optional multi-turn memory (`memory_context`)
-- **Translation cache** (in-memory TTL/LRU) to save Azure quota on repeated phrases
+- **Translation cache** (in-memory TTL/LRU) to save quota on repeated phrases
 - **API-key authentication** (`X-API-Key`) and **per-client rate limiting**
 - **Request IDs** (`X-Request-ID`) and timing headers for tracing
 - Input validation, upstream timeouts and consistent JSON error responses
@@ -41,7 +56,9 @@ built in the open so native speakers and developers can improve it together.
 ### Prerequisites
 
 - Python 3.10+
-- An Azure Translator key and a Groq API key
+- At least one provider: a [Groq API key](https://console.groq.com/keys) (free tier),
+  [MORENA running locally](docs/MORENA.md) (free), an Azure Translator key, or any
+  OpenAI-compatible API
 
 ### Run locally
 
@@ -49,13 +66,14 @@ built in the open so native speakers and developers can improve it together.
 git clone https://github.com/Terngi-AI/tergniai-multilang.git
 cd tergniai-multilang
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt
+pip install --require-hashes -r requirements-dev.lock
 
 cp .env.example .env   # then fill in your keys
 uvicorn main:app --reload
 ```
 
-Open http://localhost:8000/docs for the interactive API docs.
+Open **http://localhost:8000/chat** to chat in your browser, or
+http://localhost:8000/docs for the interactive API docs.
 
 ### Run with Docker
 
@@ -64,18 +82,43 @@ docker build -t terngi-ai .
 docker run --rm -p 8000:8000 --env-file .env terngi-ai
 ```
 
+### Run with MORENA (free, no API keys needed)
+
+```bash
+docker compose --profile morena up
+```
+
+This starts the API and a llama.cpp server with MORENA 1.5B (downloaded on first start,
+about 0.9 GB). See [docs/MORENA.md](docs/MORENA.md).
+
 ## Configuration
 
 All configuration comes from environment variables (see [`.env.example`](.env.example)).
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `AZURE_TRANSLATOR_KEY` | yes | — | Azure Translator subscription key |
+| `AZURE_TRANSLATOR_KEYS` | no* | — | Azure Translator keys (comma-separated, rotated) |
 | `AZURE_TRANSLATOR_ENDPOINT` | no | `https://api.cognitive.microsofttranslator.com` | Translator endpoint |
 | `AZURE_TRANSLATOR_LOCATION` | no | `global` | Azure resource region |
-| `GROQ_API_KEY` | yes (for `/v1/converse`) | — | Groq API key |
-| `GROQ_MODEL` | no | `openai/gpt-oss-120b` | Groq model ID |
+| `LLM_PROVIDERS` | no | `groq` | LLM providers in priority order |
+| `<NAME>_API_KEYS` | yes* | — | Keys for a provider, e.g. `GROQ_API_KEYS=k1,k2` (`<NAME>_API_KEY` also works) |
+| `<NAME>_MODELS` | no | provider default | Models to try in order, e.g. `GROQ_MODELS=openai/gpt-oss-120b,openai/gpt-oss-20b` |
+| `<NAME>_BASE_URL` | for custom providers | preset | OpenAI-compatible base URL |
+| `CHAT_PROVIDERS` | no | `LLM_PROVIDERS` | Providers used for `/v1/converse` |
+| `TRANSLATION_PROVIDERS` | no | `azure` + `LLM_PROVIDERS` | Providers used for translation, in order |
+| `DETECTION_PROVIDERS` | no | `azure` + LLM providers except MORENA | Providers used for language detection |
+| `AGENT_PROVIDERS` | no | OpenAI-compatible chat providers | Providers that run the agent (must support tool calling) |
+| `AGENT_MAX_STEPS` | no | `6` | Max model turns per agent request |
+| `CONVERSATION_TTL_SECONDS` | no | `86400` | How long chats are remembered after the last message |
+| `CONVERSATION_MAX_MESSAGES` | no | `40` | Messages kept per conversation |
+| `RATE_LIMIT_MAX_WAIT_SECONDS` | no | `10` | When every model is rate-limited, wait this long for one to free up |
+| `<NAME>_LANGUAGES` | no | all (MORENA: its 14) | Restrict a provider to certain languages |
+| `KEY_COOLDOWN_SECONDS` | no | `60` | How long to skip a rate-limited key |
+| `INVALID_KEY_COOLDOWN_SECONDS` | no | `3600` | How long to skip a rejected key |
 | `REQUEST_TIMEOUT` | no | `30` | Upstream timeout in seconds |
+| `UPSTREAM_MAX_RETRIES` | no | `2` | Retries for upstream `5xx`/connection errors (all providers) and Azure `429`s; `0` disables. LLM `429`s rotate to the next key or model instead |
+| `UPSTREAM_RETRY_BASE_DELAY` | no | `0.5` | First backoff step in seconds; doubles each retry, with full jitter |
+| `UPSTREAM_RETRY_MAX_DELAY` | no | `10` | Longest wait between retries; a longer `Retry-After` fails fast |
 | `MAX_CONTENT_LENGTH` | no | `5000` | Max characters per message |
 | `MAX_MEMORY_MESSAGES` | no | `20` | Max turns in `memory_context` |
 | `API_KEYS` | no | *(auth disabled)* | Comma-separated client keys accepted in `X-API-Key` |
@@ -84,10 +127,30 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `CACHE_MAX_ITEMS` | no | `1000` | Max cached translations |
 | `MAX_BATCH_SIZE` | no | `25` | Max texts per batch request |
 | `MAX_BATCH_CHARACTERS` | no | `50000` | Max total characters per batch |
+| `MAX_REQUEST_BYTES` | no | `1048576` | Largest request body accepted; bigger requests get `413` |
 | `CORS_ORIGINS` | no | *(disabled)* | Comma-separated allowed origins |
 | `LOG_LEVEL` | no | `INFO` | Python log level |
 
-The app starts without keys; endpoints that need a missing key return `503`.
+\* You need at least one provider. Built-in provider names are `groq`, `openrouter`,
+`together`, `cerebras`, `huggingface`, `openai`, `ollama` and `morena`; any other name works
+when you set `<NAME>_BASE_URL` to an OpenAI-compatible API.
+
+**How fallback works:** for each request, providers are tried in order. Within a provider,
+each model is tried in order, and keys rotate between requests. A key that is rejected
+(401/403) or rate-limited (429) is skipped for a while; a model that errors or returns
+unusable output is skipped for that request. The app starts without keys; endpoints with
+no configured provider return `503`.
+
+Example, using two Groq keys, OpenRouter as a backup and MORENA for translation:
+
+```bash
+LLM_PROVIDERS=groq,openrouter,morena
+GROQ_API_KEYS=gsk_key_one,gsk_key_two
+GROQ_MODELS=openai/gpt-oss-120b,openai/gpt-oss-20b
+OPENROUTER_API_KEYS=sk-or-...
+OPENROUTER_MODELS=meta-llama/llama-3.3-70b-instruct
+TRANSLATION_PROVIDERS=morena,groq,openrouter
+```
 
 ## API
 
@@ -96,11 +159,18 @@ The app starts without keys; endpoints that need a missing key return `503`.
 | `GET` | `/` | API info and supported languages |
 | `GET` | `/health` | Liveness probe |
 | `GET` | `/health/ready` | Readiness probe (are upstream keys configured?) |
+| `GET` | `/metrics` | Prometheus metrics |
 | `GET` | `/v1/languages` | Supported language codes |
 | `POST` | `/v1/translate` | Translate text |
 | `POST` | `/v1/translate/batch` | Translate up to 25 texts in one request |
 | `POST` | `/v1/detect` | Detect the language of a text |
 | `POST` | `/v1/converse` | Translate and get an LLM reply |
+| `POST` | `/v1/agent` | The assistant without server memory (send `history` yourself) |
+| `POST` | `/v1/chat` | **Chat** with memory: send `message` and `conversation_id` |
+| `GET` / `DELETE` | `/v1/chat/{id}` | Read or forget a conversation |
+| `GET` | `/chat` | Web chat page |
+
+📖 **Full usage guide with curl, Python and JavaScript examples: [docs/USAGE.md](docs/USAGE.md)**
 
 ### Authentication & rate limits
 
@@ -111,6 +181,24 @@ When `API_KEYS` is set, every `/v1/*` endpoint except `/v1/languages` requires a
 
 > The cache and rate limiter are in-memory, so each server process keeps its own state.
 > Run behind a shared limiter (e.g. your API gateway) if you scale out to many replicas.
+
+### Metrics
+
+`GET /metrics` serves Prometheus metrics. Like the health checks, it needs no API key
+and isn't rate limited, so keep it off the public internet (for example, only expose it on
+your internal network or block it at the reverse proxy).
+
+| Metric | Labels | Description |
+|---|---|---|
+| `terngi_http_requests_total` | `method`, `route`, `status` | Requests handled, including `401`/`429` rejections and unhandled `500`s |
+| `terngi_http_request_duration_seconds` | `method`, `route` | Request latency histogram |
+| `terngi_upstream_requests_total` | `service` (`azure` or the LLM provider name, e.g. `groq`, `openrouter`, `morena`), `outcome` (`success`/`error`) | Upstream calls |
+| `terngi_upstream_request_duration_seconds` | `service` | Upstream latency histogram |
+| `terngi_translation_cache_lookups_total` | `result` (`hit`/`miss`) | Translation cache lookups, one per text |
+| `terngi_rate_limited_requests_total` | — | Requests rejected by the rate limiter |
+
+`route` is the route template (e.g. `/v1/translate`), or `unmatched` for unknown paths,
+so label values stay bounded. Metrics are per process, like the cache and rate limiter.
 
 ### Translate
 
@@ -135,6 +223,31 @@ curl -X POST http://localhost:8000/v1/detect \
   -H 'Content-Type: application/json' \
   -d '{"content": "Ina kwana?"}'
 # {"language": "ha", "language_name": "Hausa", "score": 1.0, "is_supported": true}
+```
+
+### Chat
+
+```bash
+curl -X POST http://localhost:8000/v1/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "Hi! My name is Chidi and I sell tomatoes in Enugu market."}'
+# {"conversation_id": "3f9c…", "reply": "Hello Chidi! How can I help you today?", ...}
+
+# Continue in any language; it remembers
+curl -X POST http://localhost:8000/v1/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "Kedu aha m?", "conversation_id": "3f9c…"}'
+# {"reply": "Aha gị bụ Chidi.", "language": "ig", ...}
+```
+
+### Agent
+
+```bash
+curl -X POST http://localhost:8000/v1/agent \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "Nnọọ! Kedu ụbọchị taa?"}'
+# {"answer": "Ụtụtụ ọma! Taa bụ Mọnde, Ọktoba 19, 2026.", "language": "ig", "reply_language": "ig",
+#  "steps": [{"tool": "get_current_time", ...}, {"tool": "translate", ...}]}
 ```
 
 ### Converse
@@ -167,7 +280,8 @@ middleware.py        Request IDs, API-key auth and rate limiting
 config.py            Settings loaded from environment variables
 models.py            Pydantic request/response models
 routes/              HTTP endpoints
-services/            Azure Translator, Groq, cache and language helpers
+services/            Providers (Azure, LLMs, MORENA), key rotation, cache, language helpers
+docs/                Usage guide, agent design, running MORENA
 tests/               Pytest suite (upstream services are mocked)
 ```
 
@@ -180,8 +294,10 @@ mypy .
 pre-commit install    # run checks automatically on every commit
 ```
 
-CI runs lint, type checks, tests on Python 3.10–3.13, a Docker smoke test, secret scanning
-and a dependency audit on every pull request.
+CI runs lint, type checks, tests on Python 3.10–3.13 and a Docker smoke test on every pull
+request. A separate security workflow scans for malware, secrets, insecure code, vulnerable
+dependencies and container issues, and runs simulated attacks against the API, on every PR and
+daily. See [SECURITY.md](SECURITY.md#automated-security-scanning).
 
 ## Contributing
 

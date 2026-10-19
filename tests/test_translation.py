@@ -32,7 +32,7 @@ def test_translate_success(client):
     }
     assert route.called
     request = route.calls.last.request
-    assert request.headers["Ocp-Apim-Subscription-Key"] == config.AZURE_TRANSLATOR_KEY
+    assert request.headers["Ocp-Apim-Subscription-Key"] == config.AZURE_TRANSLATOR_KEYS[0]
 
 
 @respx.mock
@@ -52,7 +52,7 @@ def test_translate_same_language_skips_azure(client):
 def test_translate_unsupported_language(client):
     response = client.post(
         "/v1/translate",
-        json={"content": "Hello", "from_language": "en", "to_language": "fr"},
+        json={"content": "Hello", "from_language": "en", "to_language": "tlh-Latn"},
     )
 
     assert response.status_code == 400
@@ -119,7 +119,7 @@ def test_translate_malformed_upstream_response(client):
 
 
 def test_translate_without_key_returns_503(client, monkeypatch):
-    monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEY", "")
+    monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", [])
 
     response = client.post(
         "/v1/translate",
@@ -127,3 +127,36 @@ def test_translate_without_key_returns_503(client, monkeypatch):
     )
 
     assert response.status_code == 503
+
+
+@respx.mock
+def test_azure_rotates_to_next_key_when_one_is_revoked(client, monkeypatch):
+    monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", ["revoked-key", "good-key"])
+    route = respx.post(TRANSLATE_URL).mock(
+        side_effect=lambda request: (
+            httpx.Response(401)
+            if request.headers["Ocp-Apim-Subscription-Key"] == "revoked-key"
+            else httpx.Response(200, json=[{"translations": [{"text": "Bawo ni"}]}])
+        )
+    )
+
+    response = client.post(
+        "/v1/translate",
+        json={"content": "Hello", "from_language": "en", "to_language": "yo"},
+    )
+
+    assert response.json()["translated_text"] == "Bawo ni"
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_azure_all_keys_rejected_returns_502(client, monkeypatch):
+    monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", ["k1", "k2"])
+    respx.post(TRANSLATE_URL).mock(return_value=httpx.Response(429))
+
+    response = client.post(
+        "/v1/translate",
+        json={"content": "Hello", "from_language": "en", "to_language": "yo"},
+    )
+
+    assert response.status_code == 502

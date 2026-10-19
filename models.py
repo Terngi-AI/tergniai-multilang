@@ -2,7 +2,7 @@
 Pydantic models for the Terngi Translation API
 """
 
-from typing import Annotated, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -85,3 +85,61 @@ class DetectionResponse(BaseModel):
     language_name: Optional[str] = None
     score: float
     is_supported: bool
+
+
+class AgentRequest(BaseModel):
+    """Request model for the agent endpoint"""
+
+    message: Text
+    language: str = Field("auto", description='Language of the message, or "auto" to detect it')
+    reply_language: Optional[str] = Field(
+        None, description="Language for the answer; defaults to the message's language"
+    )
+    history: Optional[List[MemoryMessage]] = Field(default=None, max_length=MAX_MEMORY_MESSAGES)
+
+
+class AgentStep(BaseModel):
+    """A tool call made by the agent"""
+
+    tool: str
+    arguments: Any
+    output: Dict[str, Any]
+
+
+class AgentResponse(BaseModel):
+    """Response model for the agent endpoint"""
+
+    answer: str
+    language: str
+    reply_language: str
+    steps: List[AgentStep]
+
+
+class ChatRequest(BaseModel):
+    """Request model for the chat endpoint"""
+
+    message: Text
+    conversation_id: Optional[str] = Field(
+        None, description="Continue this conversation; omit to start a new one"
+    )
+    language: str = Field("auto", description='Language of the message, or "auto" to detect it')
+    reply_language: Optional[str] = Field(
+        None, description="Language for the reply; defaults to the message's language"
+    )
+
+
+class ChatResponse(BaseModel):
+    """Response model for the chat endpoint"""
+
+    conversation_id: str
+    reply: str
+    language: str
+    reply_language: str
+    steps: List[AgentStep]
+
+
+class ConversationHistory(BaseModel):
+    """A stored conversation"""
+
+    conversation_id: str
+    messages: List[MemoryMessage]

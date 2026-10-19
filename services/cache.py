@@ -42,6 +42,9 @@ class TTLCache:
         while len(self._data) > self.max_items:
             self._data.popitem(last=False)
 
+    def delete(self, key: Hashable) -> None:
+        self._data.pop(key, None)
+
     def clear(self) -> None:
         self._data.clear()
 

@@ -1,0 +1,137 @@
+name: Security
+
+# Malware, code, dependency, container and attack scans. Runs on every pull request and
+# daily, so newly published vulnerabilities are caught even when the code hasn't changed.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Scanner versions are pinned so a compromised "latest" image can't run in CI
+  SEMGREP_VERSION: "1.181.0"
+  PIP_AUDIT_VERSION: "2.10.1"
+  OSV_SCANNER_IMAGE: ghcr.io/google/osv-scanner:v2.7.0
+  TRIVY_IMAGE: aquasec/trivy:0.76.0
+  ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:2.17.0
+  # The stable ClamAV image ships with the latest virus signatures at build time
+  CLAMAV_IMAGE: clamav/clamav:stable
+
+jobs:
+  malware:
+    name: Malware scan (ClamAV)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # scan the full history a PR brings in, not just the tip
+      - name: Scan every file for viruses and malware
+        run: |
+          docker run --rm -v "$PWD:/scan:ro" "$CLAMAV_IMAGE" \
+            clamscan --recursive --infected --alert-encrypted=yes --scan-archive=yes \
+            --max-filesize=200M --max-scansize=500M /scan
+
+  sast:
+    name: Code security scan (Semgrep)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: pip install "semgrep==$SEMGREP_VERSION"
+      - name: Scan code, Dockerfile and workflows for security bugs
+        run: |
+          semgrep scan --error --metrics=off \
+            --config p/python --config p/security-audit --config p/secrets \
+            --config p/dockerfile --config p/github-actions
+
+  dependencies:
+    name: Dependency vulnerabilities
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Audit Python dependencies (pip-audit)
+        run: |
+          pip install "pip-audit==$PIP_AUDIT_VERSION"
+          pip-audit --strict --require-hashes --disable-pip -r requirements.lock
+          pip-audit --strict --require-hashes --disable-pip -r requirements-dev.lock
+      - name: Cross-check with the OSV database (osv-scanner)
+        run: |
+          docker run --rm -v "$PWD:/src:ro" "$OSV_SCANNER_IMAGE" scan source \
+            -L requirements.txt:/src/requirements.lock -L requirements.txt:/src/requirements-dev.lock
+
+  container:
+    name: Container scan (Trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Build image
+        run: docker build -t terngi-ai:scan .
+      - name: Scan image for vulnerable packages
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" \
+            image --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --no-progress \
+            terngi-ai:scan
+      - name: Scan Dockerfile and config for misconfigurations
+        run: |
+          docker run --rm -v "$PWD:/src:ro" "$TRIVY_IMAGE" \
+            config --exit-code 1 --severity CRITICAL,HIGH /src
+
+  dast:
+    name: Attack simulation (OWASP ZAP)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Start the API
+        run: |
+          docker build -t terngi-ai:scan .
+          # No provider keys: the scan never reaches paid upstream APIs.
+          # Rate limiting is off so the scanner's requests aren't all rejected with 429.
+          docker run -d --name api -p 8000:8000 -e RATE_LIMIT_PER_MINUTE=0 terngi-ai:scan
+          for i in $(seq 1 30); do curl -fsS http://localhost:8000/health && exit 0; sleep 1; done
+          docker logs api
+          exit 1
+      - name: Run ZAP API scan (active attacks against every endpoint)
+        run: |
+          mkdir -p zap && chmod 777 zap
+          docker run --rm --network host -v "$PWD/zap:/zap/wrk:rw" "$ZAP_IMAGE" \
+            zap-api-scan.py -t http://localhost:8000/openapi.json -f openapi \
+            -r zap-report.html -J zap-report.json -I
+      - name: Server logs
+        if: always()
+        run: docker logs api 2>&1 | tail -50
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: zap-report
+          path: zap/

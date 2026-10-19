@@ -12,7 +12,13 @@ def test_root(client):
 def test_languages(client):
     response = client.get("/v1/languages")
     assert response.status_code == 200
-    assert set(response.json()["languages"]) == {"en", "yo", "ha", "ig"}
+    assert {"en", "fr", "yo", "ha", "ig", "pcm", "sw", "zu", "nr"} <= set(
+        response.json()["languages"]
+    )
+    languages = response.json()["languages"]
+    for code in ["zh-Hans", "ar", "pl", "nl", "es", "ga", "ja", "hi", "am", "wo"]:
+        assert code in languages
+    assert len(languages) > 80
 
 
 def test_health(client):
