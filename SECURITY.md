@@ -46,6 +46,9 @@ these checks ([`security.yml`](.github/workflows/security.yml) and
 
 Supply-chain hardening:
 
+- Every Python package, including indirect dependencies, is locked to an exact version and
+  checksum (`requirements.lock`, `requirements-dev.lock`). Docker and CI install with
+  `--require-hashes`, so a tampered package on PyPI fails the build instead of being installed.
 - Every GitHub Action is pinned to a full commit SHA, so a moved or hijacked tag can't run in CI.
   Scanner images and tools are pinned to exact versions.
 - Workflows run with a read-only `GITHUB_TOKEN`, don't keep it in `.git/config`, and use

@@ -8,11 +8,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy only requirements first to leverage Docker's caching mechanism
-COPY requirements.txt ./
+# Copy only the lockfile first to leverage Docker's caching mechanism
+COPY requirements.lock ./
 
-# Install dependencies
-RUN pip install -r requirements.txt
+# Install exact, hash-verified dependencies: a tampered package on PyPI fails the build
+RUN pip install --require-hashes --no-deps -r requirements.lock
 
 # Copy the rest of the application code
 COPY . .

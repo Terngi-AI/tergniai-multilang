@@ -14,6 +14,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Request bodies over `MAX_REQUEST_BYTES` (1 MiB) are rejected with `413`, including streamed ones.
 - Security headers (CSP, `X-Frame-Options`, `nosniff`, `Referrer-Policy`, HSTS over HTTPS).
 - All GitHub Actions pinned to commit SHAs, checkout no longer keeps the token, scanner versions pinned.
+- Hash-locked dependencies (`requirements.lock`, `requirements-dev.lock`) installed with
+  `--require-hashes`. This also upgrades indirect dependencies with known vulnerabilities
+  (anyio 4.15.1, idna 3.20, pygments 2.21.0).
 
 ### Removed
 - Dependabot. Dependency vulnerabilities are caught by the daily security scan instead.

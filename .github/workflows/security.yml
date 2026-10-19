@@ -76,9 +76,12 @@ jobs:
       - name: Audit Python dependencies (pip-audit)
         run: |
           pip install "pip-audit==$PIP_AUDIT_VERSION"
-          pip-audit --strict -r requirements-dev.txt
+          pip-audit --strict --require-hashes --disable-pip -r requirements.lock
+          pip-audit --strict --require-hashes --disable-pip -r requirements-dev.lock
       - name: Cross-check with the OSV database (osv-scanner)
-        run: docker run --rm -v "$PWD:/src:ro" "$OSV_SCANNER_IMAGE" scan source --recursive /src
+        run: |
+          docker run --rm -v "$PWD:/src:ro" "$OSV_SCANNER_IMAGE" scan source \
+            -L requirements.txt:/src/requirements.lock -L requirements.txt:/src/requirements-dev.lock
 
   container:
     name: Container scan (Trivy)

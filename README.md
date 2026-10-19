@@ -66,7 +66,7 @@ built in the open so native speakers and developers can improve it together.
 git clone https://github.com/Terngi-AI/tergniai-multilang.git
 cd tergniai-multilang
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt
+pip install --require-hashes -r requirements-dev.lock
 
 cp .env.example .env   # then fill in your keys
 uvicorn main:app --reload
