@@ -6,9 +6,11 @@ then that provider's keys in rotation. A key that is rejected (401/403) or rate-
 (429) is put on cooldown; a model that errors or returns unusable output is skipped.
 """
 
+import asyncio
 import json
 import logging
-from typing import Any, Callable, Dict, List, Optional, Sequence, TypeVar
+import time
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, TypeVar
 
 import httpx
 from fastapi import HTTPException
@@ -30,8 +32,10 @@ MORENA_USER, MORENA_ASSISTANT = "<reserved_0>", "<reserved_1>"
 class _KeyFailed(Exception):
     """The key was rejected or rate-limited; try another key"""
 
-    def __init__(self, cooldown: float):
+    def __init__(self, cooldown: float, per_model: bool):
         self.cooldown = cooldown
+        # Rate limits apply per model (e.g. on Groq); a rejected key is bad for every model
+        self.per_model = per_model
 
 
 class _ModelFailed(Exception):
@@ -78,11 +82,12 @@ def _check_status(response: httpx.Response, provider: str, key: Optional[str]) -
     label = f"{provider} key {mask(key)}" if key else provider
     if status in (401, 403):
         logger.warning("%s was rejected (%s); skipping it for a while", label, status)
-        raise _KeyFailed(config.INVALID_KEY_COOLDOWN_SECONDS)
+        raise _KeyFailed(config.INVALID_KEY_COOLDOWN_SECONDS, per_model=False)
     if status == 429:
-        logger.warning("%s is rate-limited; trying the next key", label)
+        logger.warning("%s is rate-limited; trying the next key or model", label)
         raise _KeyFailed(
-            retry_after_seconds(response.headers.get("retry-after"), config.KEY_COOLDOWN_SECONDS)
+            retry_after_seconds(response.headers.get("retry-after"), config.KEY_COOLDOWN_SECONDS),
+            per_model=True,
         )
     logger.warning("%s returned %s: %s", provider, status, response.text[:500])
     raise _ModelFailed(f"HTTP {status}")
@@ -182,44 +187,72 @@ async def complete_message(
     Like `complete`, but `parse` receives the whole assistant message (including any
     tool calls). When `tools` are given, only OpenAI-compatible providers are used.
     """
-    attempted = False
-
-    for name in provider_names:
-        provider = config.LLM_PROVIDERS.get(name)
-        if provider is None or not provider.configured:
-            continue
-        if tools and provider.kind != "openai":
-            continue
-        attempted = True
-
-        keys: List[Optional[str]] = list(key_pool.order(f"llm:{name}", provider.api_keys))
-        if not provider.api_keys:
-            keys = [None]
-        if not keys:
-            logger.warning("All %s keys are cooling down; trying the next provider", name)
-            continue
-
-        for model in provider.models:
-            for key in keys:
-                try:
-                    message = await _call(
-                        provider, model, key, messages, json_mode, temperature, max_tokens, tools
-                    )
-                except _KeyFailed as e:
-                    if key:
-                        key_pool.cool_down(key, e.cooldown)
-                    continue
-                except _ModelFailed as e:
-                    logger.warning("%s/%s failed (%s); trying the next model", name, model, e)
-                    break
-                try:
-                    return parse(message)
-                except ValueError as e:
-                    logger.warning("%s/%s returned unusable output (%s)", name, model, e)
-                    break
-
-    if not attempted:
+    providers = [
+        provider
+        for name in provider_names
+        if (provider := config.LLM_PROVIDERS.get(name)) is not None
+        and provider.configured
+        and (not tools or provider.kind == "openai")
+    ]
+    if not providers:
         raise HTTPException(status_code=503, detail="Language model service is not configured")
+
+    # Models that failed for reasons other than rate limits are not retried
+    failed: Set[Tuple[str, str]] = set()
+    deadline = time.monotonic() + config.RATE_LIMIT_MAX_WAIT_SECONDS
+
+    while True:
+        # Shortest wait until a rate-limited key/model becomes usable again
+        soonest: Optional[float] = None
+
+        for provider in providers:
+            name = provider.name
+            keys: List[Optional[str]] = list(key_pool.order(f"llm:{name}", provider.api_keys))
+            if not provider.api_keys:
+                keys = [None]
+
+            for model in provider.models:
+                if (name, model) in failed:
+                    continue
+                for key in keys:
+                    if key and not key_pool.available(key, model):
+                        wait = key_pool.wait_time(key, model)
+                        soonest = wait if soonest is None else min(soonest, wait)
+                        continue
+                    try:
+                        message = await _call(
+                            provider,
+                            model,
+                            key,
+                            messages,
+                            json_mode,
+                            temperature,
+                            max_tokens,
+                            tools,
+                        )
+                    except _KeyFailed as e:
+                        if key:
+                            key_pool.cool_down(key, e.cooldown, model if e.per_model else None)
+                        if e.per_model:
+                            soonest = e.cooldown if soonest is None else min(soonest, e.cooldown)
+                        continue
+                    except _ModelFailed as e:
+                        logger.warning("%s/%s failed (%s); trying the next model", name, model, e)
+                        failed.add((name, model))
+                        break
+                    try:
+                        return parse(message)
+                    except ValueError as e:
+                        logger.warning("%s/%s returned unusable output (%s)", name, model, e)
+                        failed.add((name, model))
+                        break
+
+        # Everything left is rate-limited: wait briefly if a slot frees up soon enough
+        if soonest is None or time.monotonic() + soonest > deadline:
+            break
+        logger.info("All models are rate-limited; waiting %.1fs before retrying", soonest)
+        await asyncio.sleep(max(soonest, 0.05))
+
     raise HTTPException(status_code=502, detail="Error connecting to language model service")
 
 

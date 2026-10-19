@@ -15,7 +15,10 @@ def test_languages(client):
     assert {"en", "fr", "yo", "ha", "ig", "pcm", "sw", "zu", "nr"} <= set(
         response.json()["languages"]
     )
-    assert len(response.json()["languages"]) == 14
+    languages = response.json()["languages"]
+    for code in ["zh-Hans", "ar", "pl", "nl", "es", "ga", "ja", "hi", "am", "wo"]:
+        assert code in languages
+    assert len(languages) > 80
 
 
 def test_health(client):

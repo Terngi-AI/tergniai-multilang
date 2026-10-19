@@ -9,9 +9,10 @@
 
 **Open-source translation and AI conversation for Nigerian languages.**
 
-A FastAPI service and **multilingual AI agent** for **14 languages**: Yoruba, Hausa, Igbo,
-Nigerian Pidgin, Swahili, Kinyarwanda, Shona, isiZulu, isiXhosa, Setswana, Afrikaans,
-isiNdebele, English and French. It can use several providers at once:
+A **conversational AI** and translation API for **96 languages**, built
+African-first: Yoruba, Hausa, Igbo, Nigerian Pidgin, Swahili, Amharic, isiZulu and 20 more
+African languages, plus Arabic, Chinese, Spanish, French, Hindi, Japanese, Polish, Dutch, Irish
+and the other major world languages. It can use several providers at once:
 [Azure Translator](https://learn.microsoft.com/azure/ai-services/translator/),
 [Groq](https://groq.com/) or any OpenAI-compatible API, and
 [MORENA](https://huggingface.co/vamboai/morena-1.5b-instruct), an open African-language model
@@ -28,9 +29,11 @@ built in the open so native speakers and developers can improve it together.
 
 ## Features
 
-- **AI agent** (`/v1/agent`) that understands any supported language, uses tools
-  (translation, language detection, time) and answers in the user's language,
-  see [docs/AGENT.md](docs/AGENT.md)
+- **Chat like any AI assistant**: `/v1/chat` and a built-in web chat at `/chat`. Talk about
+  anything in any supported language; it remembers the conversation and you can switch
+  languages mid-chat
+- **AI agent** (`/v1/agent`) that uses tools (translation, language detection, time) behind
+  the scenes, see [docs/AGENT.md](docs/AGENT.md)
 - **Multiple providers, models and keys** — Azure, Groq, OpenRouter, Together, Cerebras,
   Hugging Face, Ollama or MORENA, tried in order; keys rotate and failing keys, models or
   providers are skipped automatically
@@ -67,7 +70,8 @@ cp .env.example .env   # then fill in your keys
 uvicorn main:app --reload
 ```
 
-Open http://localhost:8000/docs for the interactive API docs.
+Open **http://localhost:8000/chat** to chat in your browser, or
+http://localhost:8000/docs for the interactive API docs.
 
 ### Run with Docker
 
@@ -103,6 +107,10 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `DETECTION_PROVIDERS` | no | `azure` + LLM providers except MORENA | Providers used for language detection |
 | `AGENT_PROVIDERS` | no | OpenAI-compatible chat providers | Providers that run the agent (must support tool calling) |
 | `AGENT_MAX_STEPS` | no | `6` | Max model turns per agent request |
+| `CONVERSATION_TTL_SECONDS` | no | `86400` | How long chats are remembered after the last message |
+| `CONVERSATION_MAX_MESSAGES` | no | `40` | Messages kept per conversation |
+| `RATE_LIMIT_MAX_WAIT_SECONDS` | no | `10` | When every model is rate-limited, wait this long for one to free up |
+| `<NAME>_LANGUAGES` | no | all (MORENA: its 14) | Restrict a provider to certain languages |
 | `KEY_COOLDOWN_SECONDS` | no | `60` | How long to skip a rate-limited key |
 | `INVALID_KEY_COOLDOWN_SECONDS` | no | `3600` | How long to skip a rejected key |
 | `REQUEST_TIMEOUT` | no | `30` | Upstream timeout in seconds |
@@ -150,7 +158,10 @@ TRANSLATION_PROVIDERS=morena,groq,openrouter
 | `POST` | `/v1/translate/batch` | Translate up to 25 texts in one request |
 | `POST` | `/v1/detect` | Detect the language of a text |
 | `POST` | `/v1/converse` | Translate and get an LLM reply |
-| `POST` | `/v1/agent` | Ask the multilingual tool-using agent |
+| `POST` | `/v1/agent` | The assistant without server memory (send `history` yourself) |
+| `POST` | `/v1/chat` | **Chat** with memory: send `message` and `conversation_id` |
+| `GET` / `DELETE` | `/v1/chat/{id}` | Read or forget a conversation |
+| `GET` | `/chat` | Web chat page |
 
 📖 **Full usage guide with curl, Python and JavaScript examples: [docs/USAGE.md](docs/USAGE.md)**
 
@@ -187,6 +198,21 @@ curl -X POST http://localhost:8000/v1/detect \
   -H 'Content-Type: application/json' \
   -d '{"content": "Ina kwana?"}'
 # {"language": "ha", "language_name": "Hausa", "score": 1.0, "is_supported": true}
+```
+
+### Chat
+
+```bash
+curl -X POST http://localhost:8000/v1/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "Hi! My name is Chidi and I sell tomatoes in Enugu market."}'
+# {"conversation_id": "3f9c…", "reply": "Hello Chidi! How can I help you today?", ...}
+
+# Continue in any language; it remembers
+curl -X POST http://localhost:8000/v1/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "Kedu aha m?", "conversation_id": "3f9c…"}'
+# {"reply": "Aha gị bụ Chidi.", "language": "ig", ...}
 ```
 
 ### Agent

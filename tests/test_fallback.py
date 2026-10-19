@@ -194,3 +194,18 @@ def test_azure_used_for_new_supported_languages(client, chain):
 
     assert translate(client, tgt="sw").json()["translated_text"] == "Habari"
     assert azure.called
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("detected", "expected"),
+    [("zh-hans", "zh-Hans"), ("zh", "zh-Hans"), ("ZH-TW", "zh-Hant"), ("no", "nb"), ("tl", "fil")],
+)
+def test_detected_codes_are_normalised(client, chain, monkeypatch, detected, expected):
+    monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", [])
+    respx.post(CHAT_URL).mock(return_value=chat_reply({"language": detected, "score": 0.9}))
+
+    body = client.post("/v1/detect", json={"content": "text"}).json()
+
+    assert body["language"] == expected
+    assert body["is_supported"] is True

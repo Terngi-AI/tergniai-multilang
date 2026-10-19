@@ -113,3 +113,33 @@ class AgentResponse(BaseModel):
     language: str
     reply_language: str
     steps: List[AgentStep]
+
+
+class ChatRequest(BaseModel):
+    """Request model for the chat endpoint"""
+
+    message: Text
+    conversation_id: Optional[str] = Field(
+        None, description="Continue this conversation; omit to start a new one"
+    )
+    language: str = Field("auto", description='Language of the message, or "auto" to detect it')
+    reply_language: Optional[str] = Field(
+        None, description="Language for the reply; defaults to the message's language"
+    )
+
+
+class ChatResponse(BaseModel):
+    """Response model for the chat endpoint"""
+
+    conversation_id: str
+    reply: str
+    language: str
+    reply_language: str
+    steps: List[AgentStep]
+
+
+class ConversationHistory(BaseModel):
+    """A stored conversation"""
+
+    conversation_id: str
+    messages: List[MemoryMessage]

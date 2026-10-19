@@ -6,7 +6,7 @@ This guide takes you from zero to a working API, then shows every endpoint with
 - [1. Choose a setup](#1-choose-a-setup)
 - [2. Run the API](#2-run-the-api)
 - [3. Languages](#3-languages)
-- [4. Endpoints](#4-endpoints): translate, batch, detect, converse, **agent**
+- [4. Endpoints](#4-endpoints): **chat**, translate, batch, detect, agent
 - [5. Errors, limits and auth](#5-errors-limits-and-auth)
 - [6. Troubleshooting](#6-troubleshooting)
 
@@ -71,23 +71,64 @@ Interactive docs: <http://localhost:8000/docs>.
 
 ## 3. Languages
 
-| Code | Language | Code | Language |
-|---|---|---|---|
-| `en` | English | `sw` | Swahili |
-| `fr` | French | `rw` | Kinyarwanda |
-| `yo` | Yoruba | `sn` | Shona |
-| `ha` | Hausa | `zu` | isiZulu |
-| `ig` | Igbo | `xh` | isiXhosa |
-| `pcm` | Nigerian Pidgin | `tn` | Setswana |
-| `af` | Afrikaans | `nr` | isiNdebele |
+**96 languages.** `GET /v1/languages` returns the full list.
 
-Wherever a request takes `from_language` (or `language` for the agent), you can pass
-`"auto"` to detect it. `GET /v1/languages` returns this list.
+- **African (27):** Yoruba (`yo`), Hausa (`ha`), Igbo (`ig`), Nigerian Pidgin (`pcm`), Swahili (`sw`), Kinyarwanda (`rw`), Shona (`sn`), isiZulu (`zu`), isiXhosa (`xh`), Setswana (`tn`), Afrikaans (`af`), isiNdebele (`nr`), Amharic (`am`), Somali (`so`), Tigrinya (`ti`), Oromo (`om`), Malagasy (`mg`), Lingala (`ln`), Luganda (`lg`), Chichewa (`ny`), Kirundi (`rn`), Sesotho (`st`), Sesotho sa Leboa (`nso`), Wolof (`wo`), Fula (`ff`), Ewe (`ee`), Twi (`tw`)
+- **European (32):** English (`en`), French (`fr`), Spanish (`es`), Portuguese (`pt`), German (`de`), Italian (`it`), Dutch (`nl`), Polish (`pl`), Irish (`ga`), Welsh (`cy`), Swedish (`sv`), Danish (`da`), Norwegian (`nb`), Finnish (`fi`), Icelandic (`is`), Greek (`el`), Czech (`cs`), Slovak (`sk`), Hungarian (`hu`), Romanian (`ro`), Bulgarian (`bg`), Ukrainian (`uk`), Russian (`ru`), Croatian (`hr`), Serbian (`sr-Latn`), Slovenian (`sl`), Lithuanian (`lt`), Latvian (`lv`), Estonian (`et`), Albanian (`sq`), Macedonian (`mk`), Turkish (`tr`)
+- **Middle Eastern (6):** Arabic (`ar`), Hebrew (`he`), Persian (`fa`), Urdu (`ur`), Pashto (`ps`), Kurdish (`ku`)
+- **Asian (31):** Chinese (Simplified) (`zh-Hans`), Chinese (Traditional) (`zh-Hant`), Cantonese (`yue`), Japanese (`ja`), Korean (`ko`), Hindi (`hi`), Bengali (`bn`), Punjabi (`pa`), Tamil (`ta`), Telugu (`te`), Marathi (`mr`), Gujarati (`gu`), Kannada (`kn`), Malayalam (`ml`), Sinhala (`si`), Nepali (`ne`), Thai (`th`), Lao (`lo`), Khmer (`km`), Burmese (`my`), Vietnamese (`vi`), Indonesian (`id`), Malay (`ms`), Filipino (`fil`), Kazakh (`kk`), Uzbek (`uz`), Azerbaijani (`az`), Georgian (`ka`), Armenian (`hy`), Kyrgyz (`ky`), Turkmen (`tk`)
+
+Which provider handles which language:
+
+| Provider | Languages |
+|---|---|
+| MORENA | Its 12 African languages (Yoruba to isiNdebele in the list above) plus English and French. Never used for other languages. |
+| Azure Translator | All except Nigerian Pidgin, isiNdebele, Oromo, Luganda, Chichewa, Kirundi, Wolof, Fula, Ewe and Twi |
+| LLMs (Groq etc.) | All. Quality is best for widely spoken languages; native-speaker feedback is welcome for the rest |
+
+Wherever a request takes `from_language` (or `language` for chat and the agent), you can pass
+`"auto"` to detect it.
 
 ## 4. Endpoints
 
 All examples assume `BASE=http://localhost:8000`. If the server sets `API_KEYS`, add the
 header `X-API-Key: <key>`.
+
+### 💬 Chat: `POST /v1/chat` (start here)
+
+A normal AI chat, like ChatGPT, in any supported language. Ask questions, get advice, write,
+study or just talk. The server remembers the conversation, so send only the new message plus
+the `conversation_id` from the previous reply.
+
+**In the browser:** open <http://localhost:8000/chat>.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `message` | required | What you want to say, in any supported language |
+| `conversation_id` | none (starts a new chat) | Continue an earlier conversation |
+| `language` | `"auto"` | Language of `message` |
+| `reply_language` | same as `message` | Language of the reply |
+
+```bash
+curl -X POST $BASE/v1/chat -H 'Content-Type: application/json' \
+  -d '{"message": "Hi! My name is Chidi and I sell tomatoes in Enugu market."}'
+# {"conversation_id": "3f9c…", "reply": "Hello Chidi! … How can I help you today?", "language": "en", ...}
+
+curl -X POST $BASE/v1/chat -H 'Content-Type: application/json' \
+  -d '{"message": "Kedu aha m? Gịnị ka m na-ere?", "conversation_id": "3f9c…"}'
+# {"reply": "Aha gị bụ Chidi, ị na-ere tomato.", "language": "ig", ...}
+```
+
+You can switch languages mid-conversation and it keeps the context. Other calls:
+
+| Call | Purpose |
+|---|---|
+| `GET /v1/chat/{conversation_id}` | The conversation so far |
+| `DELETE /v1/chat/{conversation_id}` | Forget it |
+
+Conversations are kept in server memory for 24 hours after the last message
+(`CONVERSATION_TTL_SECONDS`) and are private to the client that started them (same API key,
+or same IP address when no key is used).
 
 ### Translate: `POST /v1/translate`
 
@@ -131,7 +172,8 @@ curl -X POST $BASE/v1/converse -H 'Content-Type: application/json' \
 
 ### Agent: `POST /v1/agent`
 
-The agent is the most capable endpoint. It understands any supported language and decides
+The same assistant as `/v1/chat`, but stateless: you send the `history` yourself. Useful when
+your app stores conversations. It understands any supported language and decides
 for itself when to use tools:
 
 | Tool | What it does |
@@ -207,13 +249,16 @@ with httpx.Client(base_url=BASE, headers=HEADERS, timeout=60) as api:
     r.raise_for_status()
     print(r.json()["translated_text"])
 
-    history = []
-    for question in ["Ẹ káàrọ̀!", "Kí ni olú-ìlú Nàìjíríà?"]:
-        r = api.post("/v1/agent", json={"message": question, "history": history})
+    # A chat: the server remembers the conversation
+    conversation_id = None
+    for message in ["Ẹ káàrọ̀! Orúkọ mi ni Adé.", "Kí ni orúkọ mi?"]:
+        body = {"message": message}
+        if conversation_id:
+            body["conversation_id"] = conversation_id
+        r = api.post("/v1/chat", json=body)
         r.raise_for_status()
-        reply = r.json()["answer"]
-        print(reply)
-        history += [{"role": "user", "content": question}, {"role": "assistant", "content": reply}]
+        conversation_id = r.json()["conversation_id"]
+        print(r.json()["reply"])
 ```
 
 ### JavaScript (browser or Node 18+)
@@ -221,18 +266,22 @@ with httpx.Client(base_url=BASE, headers=HEADERS, timeout=60) as api:
 ```js
 const BASE = "http://localhost:8000";
 
-async function agent(message, replyLanguage) {
-  const res = await fetch(`${BASE}/v1/agent`, {
+let conversationId = null;
+
+async function chat(message) {
+  const res = await fetch(`${BASE}/v1/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" /*, "X-API-Key": "..." */ },
-    body: JSON.stringify({ message, reply_language: replyLanguage }),
+    body: JSON.stringify({ message, conversation_id: conversationId }),
   });
   const body = await res.json();
   if (!res.ok) throw new Error(body.message);
-  return body.answer;
+  conversationId = body.conversation_id;
+  return body.reply;
 }
 
-console.log(await agent("What should I pack for a trip to Kigali?", "rw"));
+console.log(await chat("Habari! What should I pack for a trip to Kigali?"));
+console.log(await chat("And what's the weather usually like in December?"));
 ```
 
 To call the API from a web page on another origin, set `CORS_ORIGINS` on the server.
@@ -249,6 +298,7 @@ Every error has the same shape:
 |---|---|
 | `400` | Unsupported language, or batch too large |
 | `401` | Missing or invalid `X-API-Key` (only when `API_KEYS` is set) |
+| `404` | Unknown or expired `conversation_id` |
 | `422` | Invalid request body (details in `details`) |
 | `429` | Rate limit exceeded; wait `Retry-After` seconds |
 | `502` | Every configured provider failed |
@@ -264,6 +314,6 @@ Every response carries `X-Request-ID` (send your own to trace a request) and
 | `503 ... not configured` | Add a provider key, or check `GET /health/ready` |
 | `502` on translation | Look at the server log: it names the provider and status that failed |
 | Logs show `key …abcd was rejected` | That key is revoked or wrong; it's skipped for an hour |
-| Logs show `rate-limited` | Add more keys or models; requests move to the next one automatically |
+| Logs show `rate-limited` | Normal on free tiers. Requests move to the next key or model, and wait up to `RATE_LIMIT_MAX_WAIT_SECONDS` (10s) when all are busy. Add more keys or a second provider to avoid waits |
 | MORENA requests fail | Check `curl localhost:8080/health`; translation falls back to the next provider meanwhile |
 | Agent returns `503` | The agent needs an OpenAI-compatible provider (e.g. Groq); MORENA alone can't run it |

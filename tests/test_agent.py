@@ -218,7 +218,7 @@ def test_agent_not_configured_returns_503(client, monkeypatch):
 
 
 def test_agent_rejects_unsupported_reply_language(client):
-    assert ask(client, message="hi", reply_language="de").status_code == 400
+    assert ask(client, message="hi", reply_language="tlh-Latn").status_code == 400
 
 
 @pytest.mark.asyncio

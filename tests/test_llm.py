@@ -313,3 +313,79 @@ def test_key_pool_rotation_and_cooldown(monkeypatch):
     assert pool.order("s", ["a", "b", "c"]) == ["a", "b"]
     now[0] = 11
     assert "c" in pool.order("s", ["a", "b", "c"])
+
+
+@respx.mock
+async def test_rate_limit_only_blocks_that_model(providers):
+    # Groq rate limits are per model: a 429 on one model must not block the key for others
+    providers(provider("groq", GROQ, keys=("only-key",), models=("big", "small")))
+    route = respx.post(GROQ + "/chat/completions").mock(
+        side_effect=lambda request: (
+            httpx.Response(429, headers={"retry-after": "60"})
+            if sent_model(request) == "big"
+            else reply("from small")
+        )
+    )
+
+    assert await assistant.get_response("hi") == "from small"
+    assert await assistant.get_response("again") == "from small"
+    # "big" was skipped on the second request while cooling down
+    assert [sent_model(c.request) for c in route.calls] == ["big", "small", "small"]
+
+
+@respx.mock
+async def test_revoked_key_is_skipped_for_every_model(providers):
+    providers(provider("groq", GROQ, keys=("revoked", "good"), models=("m1", "m2")))
+    route = respx.post(GROQ + "/chat/completions").mock(
+        side_effect=lambda request: (
+            httpx.Response(401)
+            if request.headers["Authorization"] == "Bearer revoked"
+            else httpx.Response(500)
+            if sent_model(request) == "m1"
+            else reply("ok")
+        )
+    )
+
+    assert await assistant.get_response("hi") == "ok"
+    revoked = [c for c in route.calls if c.request.headers["Authorization"] == "Bearer revoked"]
+    assert len(revoked) == 1
+
+
+@respx.mock
+async def test_waits_briefly_when_everything_is_rate_limited(providers, monkeypatch):
+    monkeypatch.setattr(config, "RATE_LIMIT_MAX_WAIT_SECONDS", 5)
+    slept = []
+
+    async def fake_sleep(seconds):
+        slept.append(seconds)
+        key_pool.reset()  # time passes: the cooldown is over
+
+    monkeypatch.setattr("services.llm.asyncio.sleep", fake_sleep)
+    providers(provider("groq", GROQ, keys=("only-key",), models=("m1",)))
+    respx.post(GROQ + "/chat/completions").mock(
+        side_effect=[httpx.Response(429, headers={"retry-after": "2"}), reply("after waiting")]
+    )
+
+    assert await assistant.get_response("hi") == "after waiting"
+    assert slept == [2.0]
+
+
+@respx.mock
+async def test_does_not_wait_beyond_the_limit(providers, monkeypatch):
+    monkeypatch.setattr(config, "RATE_LIMIT_MAX_WAIT_SECONDS", 5)
+    slept = []
+
+    async def fake_sleep(seconds):
+        slept.append(seconds)
+
+    monkeypatch.setattr("services.llm.asyncio.sleep", fake_sleep)
+    providers(provider("groq", GROQ, keys=("only-key",), models=("m1",)))
+    respx.post(GROQ + "/chat/completions").mock(
+        return_value=httpx.Response(429, headers={"retry-after": "60"})
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await assistant.get_response("hi")
+
+    assert exc_info.value.status_code == 502
+    assert slept == []

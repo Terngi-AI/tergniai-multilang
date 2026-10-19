@@ -36,6 +36,7 @@ def reset_state(monkeypatch):
     """
     import config
     from middleware import rate_limiter
+    from services import conversations
     from services.keypool import key_pool
     from services.translator import translation_cache
 
@@ -55,13 +56,17 @@ def reset_state(monkeypatch):
     )
     monkeypatch.setattr(config, "CHAT_PROVIDERS", ["groq"])
     monkeypatch.setattr(config, "AGENT_PROVIDERS", ["groq"])
+    # Tests never sleep waiting for rate limits unless they opt in
+    monkeypatch.setattr(config, "RATE_LIMIT_MAX_WAIT_SECONDS", 0)
     monkeypatch.setattr(config, "TRANSLATION_PROVIDERS", ["azure"])
     monkeypatch.setattr(config, "DETECTION_PROVIDERS", ["azure"])
 
     translation_cache.clear()
     rate_limiter.reset()
     key_pool.reset()
+    conversations.clear()
     yield
     translation_cache.clear()
     rate_limiter.reset()
     key_pool.reset()
+    conversations.clear()

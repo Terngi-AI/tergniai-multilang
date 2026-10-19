@@ -15,7 +15,7 @@ import middleware
 from config import CORS_ORIGINS
 
 # Import routers
-from routes import agent, base, conversation, translation
+from routes import agent, base, chat, conversation, translation
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -47,6 +47,7 @@ app.include_router(base.router)
 app.include_router(translation.router)
 app.include_router(conversation.router)
 app.include_router(agent.router)
+app.include_router(chat.router)
 
 
 @app.exception_handler(HTTPException)

@@ -15,7 +15,7 @@ from services.keypool import key_pool, mask, retry_after_seconds
 logger = logging.getLogger(__name__)
 
 # Supported languages that Azure Translator does not offer; requests involving them skip Azure
-UNSUPPORTED_LANGUAGES = {"pcm", "nr"}
+UNSUPPORTED_LANGUAGES = {"pcm", "nr", "om", "lg", "ny", "rn", "wo", "ff", "ee", "tw"}
 
 
 def supports(*languages: str) -> bool:

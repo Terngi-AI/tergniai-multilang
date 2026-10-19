@@ -1,6 +1,7 @@
 # The Terngi AI agent
 
-`POST /v1/agent` runs a multilingual agent: a tool-calling language model that reasons in
+The assistant behind `POST /v1/chat` (with server memory) and `POST /v1/agent` (stateless) is a
+general conversational AI that can talk about anything. Under the hood it is an agent: a tool-calling language model that reasons in
 English and uses tools to translate, detect languages and look things up. Usage examples are in
 [USAGE.md](USAGE.md#agent-post-v1agent); this page explains how it works.
 

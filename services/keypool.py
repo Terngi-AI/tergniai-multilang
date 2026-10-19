@@ -30,9 +30,25 @@ class KeyPool:
         rotated = keys[start:] + keys[:start]
         return [k for k in rotated if self._cooldown_until.get(k, 0.0) <= now]
 
-    def cool_down(self, key: str, seconds: float) -> None:
-        """Skip `key` for the next `seconds`"""
-        self._cooldown_until[key] = time.monotonic() + max(seconds, 0.0)
+    def cool_down(self, key: str, seconds: float, model: Optional[str] = None) -> None:
+        """Skip `key` for the next `seconds`, for every model or only for `model`"""
+        self._cooldown_until[self._slot(key, model)] = time.monotonic() + max(seconds, 0.0)
+
+    def available(self, key: str, model: Optional[str] = None) -> bool:
+        """Whether `key` may be used now (for `model`, if given)"""
+        now = time.monotonic()
+        slots = [key] if model is None else [key, self._slot(key, model)]
+        return all(self._cooldown_until.get(slot, 0.0) <= now for slot in slots)
+
+    def wait_time(self, key: str, model: Optional[str] = None) -> float:
+        """Seconds until `key` may be used again (for `model`, if given)"""
+        now = time.monotonic()
+        slots = [key] if model is None else [key, self._slot(key, model)]
+        return max([self._cooldown_until.get(slot, 0.0) - now for slot in slots] + [0.0])
+
+    @staticmethod
+    def _slot(key: str, model: Optional[str]) -> str:
+        return key if model is None else f"{key}\x00{model}"
 
     def reset(self) -> None:
         self._counters.clear()

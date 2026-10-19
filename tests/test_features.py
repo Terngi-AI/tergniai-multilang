@@ -41,7 +41,7 @@ def test_detect_supported_language(client):
 
 @respx.mock
 def test_detect_unsupported_language(client):
-    respx.post(DETECT_URL).mock(return_value=azure_detected("de"))
+    respx.post(DETECT_URL).mock(return_value=azure_detected("tlh-Latn"))
 
     response = client.post("/v1/detect", json={"content": "Guten Morgen"})
 
@@ -67,7 +67,7 @@ def test_translate_auto_detects_source(client):
 
 @respx.mock
 def test_translate_auto_rejects_unsupported_detection(client):
-    respx.post(DETECT_URL).mock(return_value=azure_detected("de"))
+    respx.post(DETECT_URL).mock(return_value=azure_detected("tlh-Latn"))
 
     response = client.post(
         "/v1/translate",

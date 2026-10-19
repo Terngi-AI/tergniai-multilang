@@ -7,7 +7,7 @@ Never hardcode API keys in this file.
 
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, FrozenSet, List, Optional, Tuple
 
 from dotenv import find_dotenv, load_dotenv
 
@@ -16,27 +16,129 @@ from dotenv import find_dotenv, load_dotenv
 load_dotenv(os.getenv("ENV_FILE") or find_dotenv(usecwd=True))
 
 # Define supported languages
-# Codes are ISO 639-1 where one exists (Nigerian Pidgin uses ISO 639-3 "pcm").
-# This matches the twelve African languages of the MORENA model, plus English and French.
-SUPPORTED_LANGUAGES = {
-    "en": "English",
-    "fr": "French",
-    # West Africa
+# Language codes follow Azure Translator (mostly ISO 639-1; e.g. "zh-Hans", "pcm").
+# African languages come first; MORENA covers the twelve marked below plus English and French.
+AFRICAN_LANGUAGES = {
+    # MORENA languages
     "yo": "Yoruba",
     "ha": "Hausa",
     "ig": "Igbo",
     "pcm": "Nigerian Pidgin",
-    # East Africa
     "sw": "Swahili",
     "rw": "Kinyarwanda",
-    # Southern Africa
     "sn": "Shona",
     "zu": "isiZulu",
     "xh": "isiXhosa",
     "tn": "Setswana",
     "af": "Afrikaans",
     "nr": "isiNdebele",
+    # Other African languages
+    "am": "Amharic",
+    "so": "Somali",
+    "ti": "Tigrinya",
+    "om": "Oromo",
+    "mg": "Malagasy",
+    "ln": "Lingala",
+    "lg": "Luganda",
+    "ny": "Chichewa",
+    "rn": "Kirundi",
+    "st": "Sesotho",
+    "nso": "Sesotho sa Leboa",
+    "wo": "Wolof",
+    "ff": "Fula",
+    "ee": "Ewe",
+    "tw": "Twi",
 }
+
+EUROPEAN_LANGUAGES = {
+    "en": "English",
+    "fr": "French",
+    "es": "Spanish",
+    "pt": "Portuguese",
+    "de": "German",
+    "it": "Italian",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "ga": "Irish",
+    "cy": "Welsh",
+    "sv": "Swedish",
+    "da": "Danish",
+    "nb": "Norwegian",
+    "fi": "Finnish",
+    "is": "Icelandic",
+    "el": "Greek",
+    "cs": "Czech",
+    "sk": "Slovak",
+    "hu": "Hungarian",
+    "ro": "Romanian",
+    "bg": "Bulgarian",
+    "uk": "Ukrainian",
+    "ru": "Russian",
+    "hr": "Croatian",
+    "sr-Latn": "Serbian",
+    "sl": "Slovenian",
+    "lt": "Lithuanian",
+    "lv": "Latvian",
+    "et": "Estonian",
+    "sq": "Albanian",
+    "mk": "Macedonian",
+    "tr": "Turkish",
+}
+
+MIDDLE_EASTERN_LANGUAGES = {
+    "ar": "Arabic",
+    "he": "Hebrew",
+    "fa": "Persian",
+    "ur": "Urdu",
+    "ps": "Pashto",
+    "ku": "Kurdish",
+}
+
+ASIAN_LANGUAGES = {
+    "zh-Hans": "Chinese (Simplified)",
+    "zh-Hant": "Chinese (Traditional)",
+    "yue": "Cantonese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "hi": "Hindi",
+    "bn": "Bengali",
+    "pa": "Punjabi",
+    "ta": "Tamil",
+    "te": "Telugu",
+    "mr": "Marathi",
+    "gu": "Gujarati",
+    "kn": "Kannada",
+    "ml": "Malayalam",
+    "si": "Sinhala",
+    "ne": "Nepali",
+    "th": "Thai",
+    "lo": "Lao",
+    "km": "Khmer",
+    "my": "Burmese",
+    "vi": "Vietnamese",
+    "id": "Indonesian",
+    "ms": "Malay",
+    "fil": "Filipino",
+    "kk": "Kazakh",
+    "uz": "Uzbek",
+    "az": "Azerbaijani",
+    "ka": "Georgian",
+    "hy": "Armenian",
+    "ky": "Kyrgyz",
+    "tk": "Turkmen",
+}
+
+SUPPORTED_LANGUAGES = {
+    **AFRICAN_LANGUAGES,
+    **EUROPEAN_LANGUAGES,
+    **MIDDLE_EASTERN_LANGUAGES,
+    **ASIAN_LANGUAGES,
+}
+
+# Languages MORENA was trained on; it is only used for these
+MORENA_LANGUAGES = frozenset(
+    ["en", "fr", "yo", "ha", "ig", "pcm", "sw", "rw", "sn", "zu", "xh", "tn", "af", "nr"]
+)
 
 
 def _env_list(name: str) -> List[str]:
@@ -75,6 +177,11 @@ class LLMProvider:
     api_keys: Tuple[str, ...]
     models: Tuple[str, ...]
     requires_key: bool = True
+    # Languages this provider handles well; None means any language
+    languages: Optional[FrozenSet[str]] = None
+
+    def supports(self, *codes: str) -> bool:
+        return self.languages is None or all(code in self.languages for code in codes)
 
     @property
     def configured(self) -> bool:
@@ -102,6 +209,7 @@ def _load_provider(name: str) -> LLMProvider:
     """
     kind, base_url, model, requires_key = PROVIDER_PRESETS.get(name, ("openai", "", "", True))
     prefix = name.upper().replace("-", "_")
+    languages = _env_list(f"{prefix}_LANGUAGES")
     models = (
         _env_list(f"{prefix}_MODELS") or _env_list(f"{prefix}_MODEL") or ([model] if model else [])
     )
@@ -112,6 +220,9 @@ def _load_provider(name: str) -> LLMProvider:
         api_keys=tuple(_unique(_env_list(f"{prefix}_API_KEYS") + _env_list(f"{prefix}_API_KEY"))),
         models=tuple(_unique(models)),
         requires_key=requires_key,
+        languages=(
+            frozenset(languages) if languages else (MORENA_LANGUAGES if kind == "morena" else None)
+        ),
     )
 
 
@@ -138,9 +249,16 @@ AGENT_PROVIDERS = _env_list("AGENT_PROVIDERS") or [
 # Maximum reasoning/tool steps per agent request
 AGENT_MAX_STEPS = int(os.getenv("AGENT_MAX_STEPS", "6"))
 
+# Server-side chat memory for /v1/chat (in memory, per process)
+CONVERSATION_TTL_SECONDS = int(os.getenv("CONVERSATION_TTL_SECONDS", "86400"))
+CONVERSATION_MAX_ITEMS = int(os.getenv("CONVERSATION_MAX_ITEMS", "10000"))
+CONVERSATION_MAX_MESSAGES = int(os.getenv("CONVERSATION_MAX_MESSAGES", "40"))
+
 # How long (seconds) to skip a key after it is rejected or rate-limited
 KEY_COOLDOWN_SECONDS = float(os.getenv("KEY_COOLDOWN_SECONDS", "60"))
 INVALID_KEY_COOLDOWN_SECONDS = float(os.getenv("INVALID_KEY_COOLDOWN_SECONDS", "3600"))
+# When every model is rate-limited, wait up to this long for one to free up before failing
+RATE_LIMIT_MAX_WAIT_SECONDS = float(os.getenv("RATE_LIMIT_MAX_WAIT_SECONDS", "10"))
 
 # Timeout (seconds) for calls to upstream services
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "30"))

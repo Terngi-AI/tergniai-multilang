@@ -17,7 +17,7 @@ def validate_language(code: str, role: str) -> None:
             status_code=400,
             detail=(
                 f"{role} language '{code}' not supported. "
-                f"Use one of: {list(SUPPORTED_LANGUAGES.keys())}"
+                "See GET /v1/languages for the list of supported codes."
             ),
         )
 
@@ -33,7 +33,7 @@ async def resolve_source_language(content: str, from_language: str) -> str:
                 status_code=400,
                 detail=(
                     f"Detected language '{detected}' is not supported. "
-                    f"Use one of: {list(SUPPORTED_LANGUAGES.keys())}"
+                    "See GET /v1/languages for the list of supported codes."
                 ),
             )
         return detected

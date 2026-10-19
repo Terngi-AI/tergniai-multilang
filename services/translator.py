@@ -26,7 +26,7 @@ def _is_configured(name: str, languages: Sequence[str] = ()) -> bool:
     if name == "azure":
         return bool(config.AZURE_TRANSLATOR_KEYS) and azure_translator.supports(*languages)
     provider = config.LLM_PROVIDERS.get(name)
-    return provider is not None and provider.configured
+    return provider is not None and provider.configured and provider.supports(*languages)
 
 
 def translation_available() -> bool:
@@ -110,6 +110,34 @@ async def translate_batch(texts: List[str], from_language: str, to_language: str
     return [result or "" for result in results]
 
 
+# Codes that detectors commonly return, mapped to the codes used by this API
+LANGUAGE_ALIASES = {
+    "zh": "zh-Hans",
+    "zh-cn": "zh-Hans",
+    "zh-sg": "zh-Hans",
+    "zh-tw": "zh-Hant",
+    "zh-hk": "zh-Hant",
+    "sr": "sr-Latn",
+    "no": "nb",
+    "tl": "fil",
+    "iw": "he",
+    "in": "id",
+    "pt-br": "pt",
+    "pt-pt": "pt",
+    "nd": "nr",
+    "ak": "tw",
+}
+
+_CANONICAL = {code.lower(): code for code in config.SUPPORTED_LANGUAGES}
+
+
+def canonical_language(code: str) -> str:
+    """Map a detected code to the API's spelling (case-insensitive, with common aliases)"""
+    lowered = code.strip().lower().replace("_", "-")
+    lowered = LANGUAGE_ALIASES.get(lowered, lowered).lower()
+    return _CANONICAL.get(lowered, code.strip())
+
+
 async def detect_language(content: str) -> Tuple[str, float]:
     """
     Detect the language of a piece of text
@@ -117,8 +145,9 @@ async def detect_language(content: str) -> Tuple[str, float]:
     Returns:
         Tuple of (language code, confidence score between 0 and 1)
     """
-    return await _run_chain(
+    language, score = await _run_chain(
         config.DETECTION_PROVIDERS,
         lambda: azure_translator.detect_language(content),
         lambda name: assistant.detect_language(content, name),
     )
+    return canonical_language(language), score
