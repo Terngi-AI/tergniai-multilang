@@ -227,7 +227,8 @@ def test_rate_limit(client, monkeypatch):
     assert int(third.headers["Retry-After"]) >= 1
 
 
-def test_rate_limit_is_per_api_key(client, monkeypatch):
+def test_rate_limit_is_per_valid_api_key(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["a", "b"])
     monkeypatch.setattr(middleware.rate_limiter, "limit", 1)
     payload = {"content": "Hi", "from_language": "en", "to_language": "en"}
 
@@ -236,6 +237,32 @@ def test_rate_limit_is_per_api_key(client, monkeypatch):
 
     assert a.status_code == 200
     assert b.status_code == 200
+
+
+def test_made_up_api_keys_cannot_bypass_rate_limit(client, monkeypatch):
+    # With auth disabled, X-API-Key is unverified: every made-up key shares the IP's limit
+    monkeypatch.setattr(middleware.rate_limiter, "limit", 2)
+    payload = {"content": "Hi", "from_language": "en", "to_language": "en"}
+
+    statuses = [
+        client.post("/v1/translate", json=payload, headers={"X-API-Key": f"fake-{i}"}).status_code
+        for i in range(4)
+    ]
+
+    assert statuses == [200, 200, 429, 429]
+
+
+def test_rate_limiter_forgets_idle_clients(monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr(middleware.time, "monotonic", lambda: now[0])
+    limiter = middleware.RateLimiter(limit=5, window=60)
+
+    for i in range(999):
+        limiter.hit(f"ip:{i}")
+    now[0] = 120  # every client has been idle for longer than the window
+    limiter.hit("ip:fresh")  # the 1000th call triggers a sweep
+
+    assert set(limiter._hits) == {"ip:fresh"}
 
 
 # --- Request context & readiness --------------------------------------------

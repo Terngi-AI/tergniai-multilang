@@ -1,6 +1,8 @@
 # Terngi AI — Translation & Conversation API
 
 [![CI](https://github.com/Terngi-AI/tergniai-multilang/actions/workflows/ci.yml/badge.svg)](https://github.com/Terngi-AI/tergniai-multilang/actions/workflows/ci.yml)
+[![Security](https://github.com/Terngi-AI/tergniai-multilang/actions/workflows/security.yml/badge.svg)](https://github.com/Terngi-AI/tergniai-multilang/actions/workflows/security.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Terngi-AI/tergniai-multilang/badge)](https://scorecard.dev/viewer/?uri=github.com/Terngi-AI/tergniai-multilang)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -125,6 +127,7 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `CACHE_MAX_ITEMS` | no | `1000` | Max cached translations |
 | `MAX_BATCH_SIZE` | no | `25` | Max texts per batch request |
 | `MAX_BATCH_CHARACTERS` | no | `50000` | Max total characters per batch |
+| `MAX_REQUEST_BYTES` | no | `1048576` | Largest request body accepted; bigger requests get `413` |
 | `CORS_ORIGINS` | no | *(disabled)* | Comma-separated allowed origins |
 | `LOG_LEVEL` | no | `INFO` | Python log level |
 
@@ -291,8 +294,10 @@ mypy .
 pre-commit install    # run checks automatically on every commit
 ```
 
-CI runs lint, type checks, tests on Python 3.10–3.13, a Docker smoke test, secret scanning
-and a dependency audit on every pull request.
+CI runs lint, type checks, tests on Python 3.10–3.13 and a Docker smoke test on every pull
+request. A separate security workflow scans for malware, secrets, insecure code, vulnerable
+dependencies and container issues, and runs simulated attacks against the API, on every PR and
+daily. See [SECURITY.md](SECURITY.md#automated-security-scanning).
 
 ## Contributing
 

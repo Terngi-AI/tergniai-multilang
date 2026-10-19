@@ -271,6 +271,8 @@ UPSTREAM_RETRY_BASE_DELAY = float(os.getenv("UPSTREAM_RETRY_BASE_DELAY", "0.5"))
 UPSTREAM_RETRY_MAX_DELAY = float(os.getenv("UPSTREAM_RETRY_MAX_DELAY", "10"))
 
 # Request limits
+# Largest request body accepted, in bytes (larger requests get 413)
+MAX_REQUEST_BYTES = int(os.getenv("MAX_REQUEST_BYTES", str(1024 * 1024)))
 MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", "5000"))
 MAX_MEMORY_MESSAGES = int(os.getenv("MAX_MEMORY_MESSAGES", "20"))
 

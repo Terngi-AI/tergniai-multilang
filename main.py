@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 import middleware
-from config import CORS_ORIGINS
+from config import CORS_ORIGINS, MAX_REQUEST_BYTES
 
 # Import routers
 from routes import agent, base, chat, conversation, translation
@@ -29,10 +29,13 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Middleware runs in reverse order of registration: request context -> auth -> rate limit
+# Middleware runs in reverse order of registration:
+# body size limit -> security headers -> request context -> auth -> rate limit
 app.middleware("http")(middleware.rate_limit)
 app.middleware("http")(middleware.authenticate)
 app.middleware("http")(middleware.request_context)
+app.middleware("http")(middleware.security_headers)
+app.add_middleware(middleware.BodySizeLimitMiddleware, max_bytes=MAX_REQUEST_BYTES)
 
 if CORS_ORIGINS:
     app.add_middleware(
