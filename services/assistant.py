@@ -81,6 +81,25 @@ async def translate_batch(
             for text in texts
         ]
 
+    # A single text needs no JSON wrapper. Plain text is also more reliable for long texts:
+    # strict JSON mode makes some providers reject outputs they can't validate.
+    if len(texts) == 1:
+        system = (
+            f"You are a professional translator from {source} to {target}. "
+            f"Translate the user's text into {target}. "
+            f"Use correct {target} orthography, including tone marks and diacritics. "
+            "Preserve meaning, tone, names, numbers and formatting. "
+            "Reply with only the translation: no quotes, notes or explanations."
+        )
+        return [
+            await llm.complete(
+                [provider],
+                [{"role": "system", "content": system}, {"role": "user", "content": texts[0]}],
+                parse=_non_empty,
+                temperature=0.2,
+            )
+        ]
+
     system = (
         f"You are a professional translator from {source} to {target}. "
         f"Translate every string in the JSON array 'texts' into {target}. "

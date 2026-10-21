@@ -21,6 +21,9 @@ from services.languages import resolve_source_language
 
 logger = logging.getLogger(__name__)
 
+# Receives streaming events: ("token" | "discard" | "tool", data)
+OnEvent = Callable[[str, Dict[str, Any]], Awaitable[None]]
+
 # Tool calls executed per model step; extra calls get an error result
 MAX_TOOL_CALLS_PER_STEP = 8
 
@@ -249,6 +252,7 @@ async def run_agent(
     language: str = "auto",
     reply_language: Optional[str] = None,
     history: Optional[List[Dict[str, str]]] = None,
+    on_event: Optional[OnEvent] = None,
 ) -> Dict[str, Any]:
     """
     Run the agent on a user message
@@ -258,6 +262,9 @@ async def run_agent(
         language: Language of the message, or "auto" to detect it
         reply_language: Language for the answer (defaults to the message's language)
         history: Previous user/assistant turns
+        on_event: If given, the answer is streamed. Receives ("token", {"text"}) as text
+            arrives, ("discard", {}) when streamed text turns out to precede tool calls and
+            should be dropped, and ("tool", {"tool", "ok"}) for each tool that runs
 
     Returns:
         Dict with the answer, the languages used and the tool steps taken
@@ -287,9 +294,24 @@ async def run_agent(
     tools = tool_definitions()
 
     for _ in range(config.AGENT_MAX_STEPS):
+        streamed = False
+
+        async def on_token(text: str) -> None:
+            nonlocal streamed
+            streamed = True
+            if on_event is not None:
+                await on_event("token", {"text": text})
+
         step = await llm.complete_message(
-            config.AGENT_PROVIDERS, messages, parse=_parse_step, tools=tools, temperature=0.3
+            config.AGENT_PROVIDERS,
+            messages,
+            parse=_parse_step,
+            tools=tools,
+            temperature=0.3,
+            on_token=on_token if on_event is not None else None,
         )
+        if step["tool_calls"] and streamed and on_event is not None:
+            await on_event("discard", {})
         if not step["tool_calls"]:
             return {
                 "answer": await _finalise_answer(step["content"], reply, steps),
@@ -321,6 +343,8 @@ async def run_agent(
                 arguments = raw_arguments
             steps.append({"tool": name, "arguments": arguments, "output": output})
             logger.info("Agent tool %s -> %s", name, "error" if "error" in output else "ok")
+            if on_event is not None:
+                await on_event("tool", {"tool": name, "ok": "error" not in output})
             messages.append(
                 {
                     "role": "tool",

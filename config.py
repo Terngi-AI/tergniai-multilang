@@ -266,6 +266,8 @@ KEY_COOLDOWN_SECONDS = float(os.getenv("KEY_COOLDOWN_SECONDS", "60"))
 INVALID_KEY_COOLDOWN_SECONDS = float(os.getenv("INVALID_KEY_COOLDOWN_SECONDS", "3600"))
 # When every model is rate-limited, wait up to this long for one to free up before failing
 RATE_LIMIT_MAX_WAIT_SECONDS = float(os.getenv("RATE_LIMIT_MAX_WAIT_SECONDS", "10"))
+# How long to skip a provider whose server can't be reached (e.g. a local MORENA that's off)
+PROVIDER_DOWN_COOLDOWN_SECONDS = float(os.getenv("PROVIDER_DOWN_COOLDOWN_SECONDS", "30"))
 
 # Timeout (seconds) for calls to upstream services
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "30"))

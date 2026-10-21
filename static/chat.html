@@ -203,6 +203,29 @@
     return h;
   }
 
+  // Minimal Server-Sent Events reader for fetch() responses
+  async function readEvents(stream, onEvent) {
+    const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += value;
+      let end;
+      while ((end = buffer.indexOf("\n\n")) !== -1) {
+        const chunk = buffer.slice(0, end);
+        buffer = buffer.slice(end + 2);
+        let event = "message";
+        let data = "";
+        for (const line of chunk.split("\n")) {
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          else if (line.startsWith("data:")) data += line.slice(5).trim();
+        }
+        try { onEvent(event, JSON.parse(data)); } catch {}
+      }
+    }
+  }
+
   async function submit() {
     const text = input.value.trim();
     if (!text || busy) return;
@@ -220,20 +243,62 @@
     if (replySelect.value) body.reply_language = replySelect.value;
 
     try {
-      const res = await fetch("/v1/chat", { method: "POST", headers: headers(), body: JSON.stringify(body) });
-      const data = await res.json().catch(() => ({}));
-      typing.remove();
-      if (res.status === 404 && conversationId) {
-        conversationId = null;
-        addMessage("error", "That conversation expired. Your next message starts a new one.");
-      } else if (!res.ok) {
-        addMessage("error", data.message || `Something went wrong (${res.status}).`);
-      } else {
-        conversationId = data.conversation_id;
-        const tools = [...new Set(data.steps.map(s => s.tool))];
-        const meta = tools.length ? `used: ${tools.join(", ")}` : "";
-        addMessage("bot", data.reply, meta);
+      const res = await fetch("/v1/chat/stream", { method: "POST", headers: headers(), body: JSON.stringify(body) });
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        typing.remove();
+        if (res.status === 404 && conversationId) {
+          conversationId = null;
+          addMessage("error", "That conversation expired. Your next message starts a new one.");
+        } else {
+          addMessage("error", data.message || `Something went wrong (${res.status}).`);
+        }
+        return;
       }
+
+      // Show the reply as it streams in; "done" carries the final text
+      let bubble = null;
+      let streamed = "";
+      const usedTools = new Set();
+      const ensureBubble = () => {
+        if (!bubble) {
+          bubble = addMessage("bot", "");
+          thread.appendChild(typing); // keep the status line below the reply
+        }
+        return bubble;
+      };
+
+      await readEvents(res.body, (event, data) => {
+        if (event === "start") {
+          conversationId = data.conversation_id;
+        } else if (event === "token") {
+          streamed += data.text;
+          ensureBubble().textContent = streamed;
+          scroller.scrollTop = scroller.scrollHeight;
+        } else if (event === "discard") {
+          streamed = "";
+          if (bubble) bubble.textContent = "";
+        } else if (event === "tool") {
+          usedTools.add(data.tool);
+          typing.textContent = `Terngi AI is using ${data.tool.replace(/_/g, " ")}…`;
+        } else if (event === "done") {
+          conversationId = data.conversation_id;
+          const el = ensureBubble();
+          el.replaceChildren();
+          render(el, data.reply);
+          if (usedTools.size) {
+            const m = document.createElement("div");
+            m.className = "meta";
+            m.textContent = `used: ${[...usedTools].join(", ")}`;
+            el.appendChild(m);
+          }
+        } else if (event === "error") {
+          bubble?.remove();
+          bubble = null;
+          addMessage("error", data.message || "Something went wrong.");
+        }
+      });
+      typing.remove();
     } catch (err) {
       typing.remove();
       addMessage("error", "Couldn't reach the server. Check your connection and try again.");
