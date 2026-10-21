@@ -82,6 +82,15 @@ docker build -t terngi-ai .
 docker run --rm -p 8000:8000 --env-file .env terngi-ai
 ```
 
+### Run with Docker Compose (API + Redis)
+
+```bash
+docker compose up
+```
+
+Starts the API with Redis, so the cache, rate limits and chat conversations are shared and
+survive restarts.
+
 ### Run with MORENA (free, no API keys needed)
 
 ```bash
@@ -111,6 +120,9 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `AGENT_MAX_STEPS` | no | `6` | Max model turns per agent request |
 | `CONVERSATION_TTL_SECONDS` | no | `86400` | How long chats are remembered after the last message |
 | `CONVERSATION_MAX_MESSAGES` | no | `40` | Messages kept per conversation |
+| `REDIS_URL` | no | *(in-memory)* | Redis for shared cache, rate limits and conversations, e.g. `redis://localhost:6379/0` |
+| `REDIS_PREFIX` | no | `terngi:` | Prefix for every Redis key |
+| `REDIS_TIMEOUT` | no | `2` | Redis connect/read timeout in seconds |
 | `RATE_LIMIT_MAX_WAIT_SECONDS` | no | `10` | When every model is rate-limited, wait this long for one to free up |
 | `<NAME>_LANGUAGES` | no | all (MORENA: its 14) | Restrict a provider to certain languages |
 | `KEY_COOLDOWN_SECONDS` | no | `60` | How long to skip a rate-limited key |
@@ -179,8 +191,9 @@ When `API_KEYS` is set, every `/v1/*` endpoint except `/v1/languages` requires a
 `RATE_LIMIT_PER_MINUTE` requests per minute. Responses include `X-RateLimit-Limit` and
 `X-RateLimit-Remaining`; when exceeded you get `429` with a `Retry-After` header.
 
-> The cache and rate limiter are in-memory, so each server process keeps its own state.
-> Run behind a shared limiter (e.g. your API gateway) if you scale out to many replicas.
+> By default the cache, rate limiter and chat conversations live in each server process's
+> memory. Set `REDIS_URL` to share them between replicas and keep conversations across restarts
+> (`docker compose up` does this for you).
 
 ### Metrics
 

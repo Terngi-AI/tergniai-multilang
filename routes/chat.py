@@ -33,13 +33,13 @@ async def chat(request: ChatRequest, http_request: Request):
 
     owner = client_id(http_request)
     if request.conversation_id:
-        history = conversations.get(request.conversation_id, owner)
+        history = await conversations.get(request.conversation_id, owner)
         if history is None:
             raise HTTPException(status_code=404, detail="Conversation not found or expired")
         conversation_id = request.conversation_id
     else:
         history = []
-        conversation_id = conversations.create(owner)
+        conversation_id = await conversations.create(owner)
 
     try:
         result = await run_agent(
@@ -54,7 +54,7 @@ async def chat(request: ChatRequest, http_request: Request):
         logger.exception("Unexpected chat error")
         raise HTTPException(status_code=500, detail="Chat error") from e
 
-    conversations.append(
+    await conversations.append(
         conversation_id,
         owner,
         {"role": "user", "content": request.message},
@@ -73,7 +73,7 @@ async def chat(request: ChatRequest, http_request: Request):
 @router.get("/v1/chat/{conversation_id}", response_model=ConversationHistory)
 async def get_conversation(conversation_id: str, http_request: Request):
     """Return the messages of a conversation"""
-    messages = conversations.get(conversation_id, client_id(http_request))
+    messages = await conversations.get(conversation_id, client_id(http_request))
     if messages is None:
         raise HTTPException(status_code=404, detail="Conversation not found or expired")
     return ConversationHistory(
@@ -85,7 +85,7 @@ async def get_conversation(conversation_id: str, http_request: Request):
 @router.delete("/v1/chat/{conversation_id}", status_code=204)
 async def delete_conversation(conversation_id: str, http_request: Request):
     """Forget a conversation"""
-    if not conversations.delete(conversation_id, client_id(http_request)):
+    if not await conversations.delete(conversation_id, client_id(http_request)):
         raise HTTPException(status_code=404, detail="Conversation not found or expired")
     return Response(status_code=204)
 

@@ -86,7 +86,7 @@ def test_no_provider_configured_returns_503(client, chain, monkeypatch):
 
     assert translate(client).status_code == 503
     ready = client.get("/health/ready").json()["services"]
-    assert ready == {"translator": False, "llm": False, "agent": False}
+    assert ready == {"translator": False, "llm": False, "agent": False, "storage": True}
 
 
 @respx.mock

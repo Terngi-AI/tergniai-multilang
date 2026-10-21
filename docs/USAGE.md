@@ -126,8 +126,9 @@ You can switch languages mid-conversation and it keeps the context. Other calls:
 | `GET /v1/chat/{conversation_id}` | The conversation so far |
 | `DELETE /v1/chat/{conversation_id}` | Forget it |
 
-Conversations are kept in server memory for 24 hours after the last message
-(`CONVERSATION_TTL_SECONDS`) and are private to the client that started them (same API key,
+Conversations are kept for 24 hours after the last message (`CONVERSATION_TTL_SECONDS`), in
+server memory or, when `REDIS_URL` is set, in Redis (shared by all replicas and kept across
+restarts), and are private to the client that started them (same API key,
 or same IP address when no key is used).
 
 ### Translate: `POST /v1/translate`
@@ -316,4 +317,5 @@ Every response carries `X-Request-ID` (send your own to trace a request) and
 | Logs show `key …abcd was rejected` | That key is revoked or wrong; it's skipped for an hour |
 | Logs show `rate-limited` | Normal on free tiers. Requests move to the next key or model, and wait up to `RATE_LIMIT_MAX_WAIT_SECONDS` (10s) when all are busy. Add more keys or a second provider to avoid waits |
 | MORENA requests fail | Check `curl localhost:8080/health`; translation falls back to the next provider meanwhile |
+| Chat returns `503 Conversation storage is unavailable` | Redis is unreachable; check `REDIS_URL` and `GET /health/ready` (`"storage": false`). Translation keeps working without the cache |
 | Agent returns `503` | The agent needs an OpenAI-compatible provider (e.g. Groq); MORENA alone can't run it |

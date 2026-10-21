@@ -6,3 +6,4 @@ python-dotenv==1.2.4
 python-multipart==0.0.32
 tzdata==2025.2
 prometheus-client==0.26.0
+redis==8.1.0
