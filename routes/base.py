@@ -8,7 +8,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 import config
 from config import SUPPORTED_LANGUAGES
-from services import llm
+from services import llm, store
 from services.translator import translation_available
 
 router = APIRouter()
@@ -43,11 +43,12 @@ async def prometheus_metrics() -> Response:
 
 @router.get("/health/ready")
 async def ready():
-    """Readiness probe: reports whether upstream services are configured"""
+    """Readiness probe: reports whether upstream services and shared storage are usable"""
     services = {
         "translator": translation_available(),
         "llm": llm.is_configured(config.CHAT_PROVIDERS),
         "agent": llm.is_configured(config.AGENT_PROVIDERS, kind="openai"),
+        "storage": await store.ping(),
     }
     is_ready = all(services.values())
     return JSONResponse(

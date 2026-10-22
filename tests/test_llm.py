@@ -390,3 +390,35 @@ async def test_does_not_wait_beyond_the_limit(providers, monkeypatch):
 
     assert exc_info.value.status_code == 502
     assert slept == []
+
+
+@respx.mock
+async def test_unreachable_provider_is_skipped_for_a_while(providers, monkeypatch):
+    monkeypatch.setattr(config, "UPSTREAM_MAX_RETRIES", 0)
+    providers(morena_provider(), provider("groq", GROQ))
+    morena = respx.post(MORENA + "/completion").mock(side_effect=httpx.ConnectError("refused"))
+    respx.post(GROQ + "/chat/completions").mock(return_value=reply("from groq"))
+
+    assert await assistant.get_response("one") == "from groq"
+    assert await assistant.get_response("two") == "from groq"
+
+    # The dead server was tried once, not on every request
+    assert morena.call_count == 1
+
+
+@respx.mock
+async def test_unreachable_provider_is_tried_again_after_the_cooldown(providers, monkeypatch):
+    monkeypatch.setattr(config, "UPSTREAM_MAX_RETRIES", 0)
+    now = [1000.0]
+    monkeypatch.setattr("services.keypool.time.monotonic", lambda: now[0])
+    providers(morena_provider(), provider("groq", GROQ))
+    morena = respx.post(MORENA + "/completion").mock(
+        side_effect=[httpx.ConnectError("refused"), httpx.Response(200, json={"content": "back"})]
+    )
+    respx.post(GROQ + "/chat/completions").mock(return_value=reply("from groq"))
+
+    await assistant.get_response("one")
+    now[0] += config.PROVIDER_DOWN_COOLDOWN_SECONDS + 1
+
+    assert await assistant.get_response("two") == "back"
+    assert morena.call_count == 2

@@ -10,7 +10,7 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, TypeVar
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Set, Tuple, TypeVar
 
 import httpx
 from fastapi import HTTPException
@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 Message = Dict[str, Any]
+# Receives each piece of generated text as it streams in
+OnToken = Callable[[str], Awaitable[None]]
 
 # MORENA chat markers: single reserved tokens in its vocabulary (see the model card).
 # Do not replace them with <|user|>-style strings; that produces degenerate output.
@@ -42,6 +44,22 @@ class _KeyFailed(Exception):
 
 class _ModelFailed(Exception):
     """The model can't serve this request; try the next model"""
+
+    def __init__(self, reason: str, unreachable: bool = False):
+        super().__init__(reason)
+        # The provider's server couldn't be reached at all, so its other models won't work either
+        self.unreachable = unreachable
+
+
+def _provider_slot(name: str) -> str:
+    """Key-pool slot used to rest a provider whose server is unreachable"""
+    return f"provider:{name}"
+
+
+def is_available(name: str) -> bool:
+    """Whether a provider is configured and not resting after being unreachable"""
+    provider = config.LLM_PROVIDERS.get(name)
+    return provider is not None and provider.configured and key_pool.available(_provider_slot(name))
 
 
 def is_configured(provider_names: Sequence[str], kind: Optional[str] = None) -> bool:
@@ -81,7 +99,9 @@ async def _post(url: str, headers: Dict[str, str], body: Dict[str, Any]) -> http
             except httpx.HTTPError as e:
                 delay = retry_delay(attempt, None) if isinstance(e, httpx.TransportError) else None
                 if delay is None or attempt >= config.UPSTREAM_MAX_RETRIES:
-                    raise _ModelFailed(f"connection error: {type(e).__name__}") from e
+                    raise _ModelFailed(
+                        f"connection error: {type(e).__name__}", unreachable=True
+                    ) from e
                 reason = type(e).__name__
             else:
                 status = response.status_code
@@ -123,6 +143,62 @@ def _check_status(response: httpx.Response, provider: str, key: Optional[str]) -
     raise _ModelFailed(f"HTTP {status}")
 
 
+async def _stream_chat(
+    url: str,
+    headers: Dict[str, str],
+    body: Dict[str, Any],
+    provider: str,
+    key: Optional[str],
+    on_token: OnToken,
+) -> Message:
+    """
+    POST a streaming chat completion, forward content deltas to `on_token` and return the
+    assembled assistant message (content plus any tool calls built up from their deltas)
+    """
+    content: List[str] = []
+    tool_calls: Dict[int, Dict[str, Any]] = {}
+    try:
+        async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
+            async with client.stream("POST", url, headers=headers, json=body) as response:
+                if response.status_code != 200:
+                    await response.aread()
+                    _check_status(response, provider, key)
+                async for line in response.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    data = line[len("data:") :].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        delta = json.loads(data)["choices"][0].get("delta") or {}
+                    except (ValueError, LookupError, TypeError):
+                        continue  # keep-alives and provider-specific extras
+                    text = delta.get("content")
+                    if text:
+                        content.append(text)
+                        await on_token(text)
+                    for part in delta.get("tool_calls") or []:
+                        call = tool_calls.setdefault(
+                            part.get("index", len(tool_calls)),
+                            {
+                                "id": "",
+                                "type": "function",
+                                "function": {"name": "", "arguments": ""},
+                            },
+                        )
+                        call["id"] = part.get("id") or call["id"]
+                        function = part.get("function") or {}
+                        call["function"]["name"] += function.get("name") or ""
+                        call["function"]["arguments"] += function.get("arguments") or ""
+    except httpx.HTTPError as e:
+        raise _ModelFailed(f"connection error: {type(e).__name__}", unreachable=True) from e
+
+    message: Message = {"role": "assistant", "content": "".join(content)}
+    if tool_calls:
+        message["tool_calls"] = [tool_calls[index] for index in sorted(tool_calls)]
+    return message
+
+
 async def _call(
     provider: LLMProvider,
     model: str,
@@ -132,6 +208,7 @@ async def _call(
     temperature: float,
     max_tokens: Optional[int],
     tools: Optional[List[Dict[str, Any]]] = None,
+    on_token: Optional[OnToken] = None,
 ) -> Message:
     """Send one request to one provider/model/key and return the assistant message"""
     headers = {"Authorization": f"Bearer {key}"} if key else {}
@@ -159,6 +236,11 @@ async def _call(
     if tools:
         body["tools"] = tools
         body["tool_choice"] = "auto"
+    if on_token is not None:
+        body["stream"] = True
+        return await _stream_chat(
+            f"{provider.base_url}/chat/completions", headers, body, provider.name, key, on_token
+        )
     response = await _post(f"{provider.base_url}/chat/completions", headers, body)
     _check_status(response, provider.name, key)
     try:
@@ -212,10 +294,15 @@ async def complete_message(
     json_mode: bool = False,
     temperature: float = 0.7,
     max_tokens: Optional[int] = None,
+    on_token: Optional[OnToken] = None,
 ) -> T:
     """
     Like `complete`, but `parse` receives the whole assistant message (including any
     tool calls). When `tools` are given, only OpenAI-compatible providers are used.
+
+    With `on_token`, the response is streamed and each piece of text is passed to it as it
+    arrives. Fallback to another model or provider only happens before the first token;
+    after that a failure is final, so the caller never receives text from two models.
     """
     providers = [
         provider
@@ -223,7 +310,16 @@ async def complete_message(
         if (provider := config.LLM_PROVIDERS.get(name)) is not None
         and provider.configured
         and (not tools or provider.kind == "openai")
+        and (on_token is None or provider.kind == "openai")
     ]
+    emitted = False
+
+    async def forward(text: str) -> None:
+        nonlocal emitted
+        emitted = True
+        if on_token is not None:
+            await on_token(text)
+
     if not providers:
         raise HTTPException(status_code=503, detail="Language model service is not configured")
 
@@ -237,11 +333,15 @@ async def complete_message(
 
         for provider in providers:
             name = provider.name
+            if not key_pool.available(_provider_slot(name)):
+                continue  # recently unreachable; don't pay for the connection timeout again
             keys: List[Optional[str]] = list(key_pool.order(f"llm:{name}", provider.api_keys))
             if not provider.api_keys:
                 keys = [None]
 
             for model in provider.models:
+                if not key_pool.available(_provider_slot(name)):
+                    break
                 if (name, model) in failed:
                     continue
                 for key in keys:
@@ -260,20 +360,42 @@ async def complete_message(
                                 temperature,
                                 max_tokens,
                                 tools,
+                                forward if on_token is not None else None,
                             )
-                    except _KeyFailed as e:
+                    except (_KeyFailed, _ModelFailed) as e:
+                        if emitted:
+                            logger.warning("%s/%s failed mid-stream (%s)", name, model, e)
+                            raise HTTPException(
+                                status_code=502, detail="Language model stream was interrupted"
+                            ) from e
+                        if isinstance(e, _ModelFailed):
+                            logger.warning(
+                                "%s/%s failed (%s); trying the next model", name, model, e
+                            )
+                            failed.add((name, model))
+                            if e.unreachable:
+                                logger.warning(
+                                    "%s is unreachable; skipping it for %.0fs",
+                                    name,
+                                    config.PROVIDER_DOWN_COOLDOWN_SECONDS,
+                                )
+                                key_pool.cool_down(
+                                    _provider_slot(name), config.PROVIDER_DOWN_COOLDOWN_SECONDS
+                                )
+                            break
+
                         if key:
                             key_pool.cool_down(key, e.cooldown, model if e.per_model else None)
                         if e.per_model:
                             soonest = e.cooldown if soonest is None else min(soonest, e.cooldown)
                         continue
-                    except _ModelFailed as e:
-                        logger.warning("%s/%s failed (%s); trying the next model", name, model, e)
-                        failed.add((name, model))
-                        break
                     try:
                         return parse(message)
                     except ValueError as e:
+                        if emitted:
+                            raise HTTPException(
+                                status_code=502, detail="Language model returned unusable output"
+                            ) from e
                         logger.warning("%s/%s returned unusable output (%s)", name, model, e)
                         failed.add((name, model))
                         break

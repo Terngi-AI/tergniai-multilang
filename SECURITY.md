@@ -66,5 +66,9 @@ Supply-chain hardening:
   including streamed bodies without a `Content-Length`.
 - Security headers on every response: `X-Content-Type-Options`, `X-Frame-Options`,
   `Referrer-Policy`, `Permissions-Policy`, a strict `Content-Security-Policy`, and HSTS over HTTPS.
+- Redis (optional) should never be reachable from the internet: keep it on a private network
+  (as in `docker-compose.yml`) and use a password or TLS (`rediss://user:pass@host`) in
+  `REDIS_URL` when it isn't local. API keys are stored only as hashes in Redis keys and
+  conversation owners.
 - Upstream error details are logged, never returned to clients. Conversation history can't
   inject system prompts.

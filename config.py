@@ -249,6 +249,13 @@ AGENT_PROVIDERS = _env_list("AGENT_PROVIDERS") or [
 # Maximum reasoning/tool steps per agent request
 AGENT_MAX_STEPS = int(os.getenv("AGENT_MAX_STEPS", "6"))
 
+# Shared storage. With REDIS_URL set (e.g. redis://localhost:6379/0), the translation cache,
+# rate limits and chat conversations are shared by every replica and survive restarts.
+# Without it they live in each process's memory.
+REDIS_URL = os.getenv("REDIS_URL", "")
+REDIS_PREFIX = os.getenv("REDIS_PREFIX", "terngi:")
+REDIS_TIMEOUT = float(os.getenv("REDIS_TIMEOUT", "2"))
+
 # Server-side chat memory for /v1/chat (in memory, per process)
 CONVERSATION_TTL_SECONDS = int(os.getenv("CONVERSATION_TTL_SECONDS", "86400"))
 CONVERSATION_MAX_ITEMS = int(os.getenv("CONVERSATION_MAX_ITEMS", "10000"))
@@ -259,6 +266,8 @@ KEY_COOLDOWN_SECONDS = float(os.getenv("KEY_COOLDOWN_SECONDS", "60"))
 INVALID_KEY_COOLDOWN_SECONDS = float(os.getenv("INVALID_KEY_COOLDOWN_SECONDS", "3600"))
 # When every model is rate-limited, wait up to this long for one to free up before failing
 RATE_LIMIT_MAX_WAIT_SECONDS = float(os.getenv("RATE_LIMIT_MAX_WAIT_SECONDS", "10"))
+# How long to skip a provider whose server can't be reached (e.g. a local MORENA that's off)
+PROVIDER_DOWN_COOLDOWN_SECONDS = float(os.getenv("PROVIDER_DOWN_COOLDOWN_SECONDS", "30"))
 
 # Timeout (seconds) for calls to upstream services
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "30"))

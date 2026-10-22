@@ -5,7 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+
 ### Security
+- `certifi` upgraded to 2026.10.19 (PYSEC-2026-4320).
 - **Security workflow** on every PR and daily: ClamAV malware scan, Semgrep static analysis,
   pip-audit + OSV-Scanner dependency audits, Trivy image/Dockerfile scan, and an OWASP ZAP attack
   simulation against the running API. OpenSSF Scorecard runs weekly.
@@ -22,6 +24,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Dependabot. Dependency vulnerabilities are caught by the daily security scan instead.
 
 ### Added
+- **Streaming chat** (#10): `POST /v1/chat/stream` sends the reply as Server-Sent Events
+  (`start`, `token`, `discard`, `tool`, `done`, `error`) while it's generated; the web chat now
+  shows replies word by word and which tool is running. Fallback to another model still works
+  until the first token.
+- **Redis backend** (#11): set `REDIS_URL` to share the translation cache, rate limits and chat
+  conversations between replicas and keep conversations across restarts. Falls back to
+  in-memory state when unset. If Redis is down, translation works without the cache and the
+  rate limiter fails open; chat returns `503`. `/health/ready` reports `storage`.
+  `docker compose up` now starts Redis too.
 - Prometheus metrics at `GET /metrics`: requests by route and status, latency, upstream
   calls per provider, translation cache hits/misses and rate-limited requests (#35).
 - Retries with exponential backoff and jitter for transient upstream errors, honouring
@@ -60,6 +71,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `GROQ_SYSTEM_PROMPT` is now `SYSTEM_PROMPT`.
 
 ### Fixed
+- A provider whose server can't be reached (e.g. MORENA switched off) is skipped for
+  `PROVIDER_DOWN_COOLDOWN_SECONDS` (30s) instead of being retried on every request.
+- Single texts are translated as plain text instead of strict JSON, which some providers
+  rejected for long outputs (`Failed to validate JSON`), wasting several seconds per request.
 - Translation results were cached in two places after #32 landed on top of #34/#35, so stale
   translations leaked between requests and 26 tests failed on `develop`. There is now one cache.
 - Unhandled exceptions are counted as `500` in the request metrics.

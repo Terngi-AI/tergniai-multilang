@@ -30,6 +30,15 @@ user message (any language)
 - **The server checks the result.** Models sometimes echo the English draft or skip the tool, and
   `_finalise_answer` in `services/agent.py` fixes both cases.
 
+## Streaming
+
+`POST /v1/chat/stream` runs the same loop with streamed model calls. Text from each model
+step is forwarded as `token` events as it arrives. If a step turns out to be a tool call, a
+`discard` event tells the client to drop that text, and each tool that runs is reported as a
+`tool` event. The final `done` event carries the checked answer. Provider fallback still works
+until the first token has been sent; after that a failure ends the stream with an `error`
+event, so a reply never mixes text from two models.
+
 ## Configuration
 
 | Variable | Default | Meaning |

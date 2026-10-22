@@ -5,6 +5,7 @@ Providers come from TRANSLATION_PROVIDERS / DETECTION_PROVIDERS: "azure" or any 
 provider name. Unconfigured providers are skipped; if one fails the next is tried.
 """
 
+import hashlib
 import logging
 from typing import Awaitable, Callable, List, Optional, Sequence, Tuple, TypeVar
 
@@ -12,22 +13,43 @@ from fastapi import HTTPException
 
 import config
 import metrics
-from services import assistant, azure_translator
-from services.cache import TTLCache
+from services import assistant, azure_translator, llm
+from services.store import StoreError, make_store
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
 # Cache of (from_language, to_language, content) -> translated text
-translation_cache = TTLCache(max_items=config.CACHE_MAX_ITEMS, ttl=config.CACHE_TTL_SECONDS)
+translation_cache = make_store("translation", config.CACHE_MAX_ITEMS, config.CACHE_TTL_SECONDS)
+
+
+def _cache_key(from_language: str, to_language: str, text: str) -> str:
+    """Fixed-length cache key, so long texts don't make huge Redis keys"""
+    return hashlib.sha256(f"{from_language}\x00{to_language}\x00{text}".encode()).hexdigest()
+
+
+async def _cache_get(key: str) -> Optional[str]:
+    try:
+        return await translation_cache.get(key)
+    except StoreError:
+        logger.warning("Translation cache unavailable; translating without it")
+        return None
+
+
+async def _cache_set(key: str, value: str) -> None:
+    try:
+        await translation_cache.set(key, value)
+    except StoreError:
+        logger.warning("Translation cache unavailable; result not cached")
 
 
 def _is_configured(name: str, languages: Sequence[str] = ()) -> bool:
     if name == "azure":
         return bool(config.AZURE_TRANSLATOR_KEYS) and azure_translator.supports(*languages)
     provider = config.LLM_PROVIDERS.get(name)
-    return provider is not None and provider.configured and provider.supports(*languages)
+    # Providers resting after being unreachable are skipped quietly
+    return llm.is_available(name) and provider is not None and provider.supports(*languages)
 
 
 def translation_available() -> bool:
@@ -91,9 +113,8 @@ async def translate_batch(texts: List[str], from_language: str, to_language: str
     if from_language == to_language:
         return list(texts)
 
-    results: List[Optional[str]] = [
-        translation_cache.get((from_language, to_language, text)) for text in texts
-    ]
+    keys = [_cache_key(from_language, to_language, text) for text in texts]
+    results: List[Optional[str]] = [await _cache_get(key) for key in keys]
     missing = [i for i, result in enumerate(results) if result is None]
     metrics.CACHE_LOOKUPS.labels("hit").inc(len(texts) - len(missing))
     metrics.CACHE_LOOKUPS.labels("miss").inc(len(missing))
@@ -108,7 +129,7 @@ async def translate_batch(texts: List[str], from_language: str, to_language: str
         )
         for i, text in zip(missing, translated, strict=True):
             results[i] = text
-            translation_cache.set((from_language, to_language, texts[i]), text)
+            await _cache_set(keys[i], text)
 
     return [result or "" for result in results]
 

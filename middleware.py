@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 import config
 import metrics
+from services.store import RedisRateLimiter, using_redis
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ class RateLimiter:
         self._hits: Dict[str, Deque[float]] = defaultdict(deque)
         self._calls = 0
 
-    def hit(self, client_id: str) -> "tuple[bool, int, float]":
+    async def hit(self, client_id: str) -> "tuple[bool, int, float]":
         """
         Record a request for `client_id`
 
@@ -87,7 +88,11 @@ class RateLimiter:
         self._calls = 0
 
 
-rate_limiter = RateLimiter(limit=config.RATE_LIMIT_PER_MINUTE)
+rate_limiter: Any = (
+    RedisRateLimiter(limit=config.RATE_LIMIT_PER_MINUTE)
+    if using_redis()
+    else RateLimiter(limit=config.RATE_LIMIT_PER_MINUTE)
+)
 
 
 def _fingerprint(api_key: str) -> str:
@@ -178,7 +183,7 @@ async def rate_limit(request: Request, call_next: CallNext) -> Response:
     if rate_limiter.limit <= 0 or request.url.path in PUBLIC_PATHS or request.method == "OPTIONS":
         return await call_next(request)
 
-    allowed, remaining, retry_after = rate_limiter.hit(rate_limit_id(request))
+    allowed, remaining, retry_after = await rate_limiter.hit(rate_limit_id(request))
     headers = {
         "X-RateLimit-Limit": str(rate_limiter.limit),
         "X-RateLimit-Remaining": str(remaining),
