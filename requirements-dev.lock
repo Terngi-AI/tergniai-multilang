@@ -74,6 +74,10 @@ ast-serialize==0.13.1 \
     --hash=sha256:f8b17e2921e56621bcb46792bd3e0b82ca3b85de78d5936e7b8174ba1758b0aa \
     --hash=sha256:fb8021f4dc3296de18737e3b8b34994411da725374d74a0b9eb32a738f2a23d0
     # via mypy
+async-timeout==5.0.1 ; python_full_version < '3.11.3' \
+    --hash=sha256:39e3809566ff85354557ec2398b55e096c8364bacac9405a7a1fa429e77fe76c \
+    --hash=sha256:d9321a7a3d5a6a5e187e824d2fa0793ce379a202935782d555d6e9d2735677d3
+    # via redis
 backports-asyncio-runner==1.2.0 ; python_full_version < '3.11' \
     --hash=sha256:0da0a936a8aeb554eccb426dc55af3ba63bcdc69fa1a600b5bb305413a4477b5 \
     --hash=sha256:a5aa7b2b7d8f8bfcaa2b57313f70792df84e32a2a746f585213373f900b42162
@@ -229,6 +233,10 @@ exceptiongroup==1.3.1 ; python_full_version < '3.11' \
     # via
     #   anyio
     #   pytest
+fakeredis==2.40.0 \
+    --hash=sha256:16eb05a3e97c37a033c73d1da7e885eb2aa47ba7604cc377144339efa2780a02 \
+    --hash=sha256:b155ef2442134372eb1cc5664cf5638ccbe0a6dde9d1942153708e2782f315c9
+    # via -r requirements-dev.txt
 fastapi==0.148.0 \
     --hash=sha256:06ee16c50e429daf993a58ecbb5306d284c4c1ee8135380af39a5e1cfa715187 \
     --hash=sha256:2848088aa482c875c180ef92b7139fec345393d09cdcf258ba4b8555ab068a3b
@@ -891,6 +899,12 @@ pyyaml==6.0.3 \
     # via
     #   pre-commit
     #   uvicorn
+redis==8.1.0 \
+    --hash=sha256:6e1a19beef9225c83efd689c7e6b7da2d5215b1f42cd13b7fc3714d0a09c7b25 \
+    --hash=sha256:a4fe1aac3d3b3cc791d4b3d5931c5a956045dc951ee74d1c913ee3ac4d2ee9fb
+    # via
+    #   -r requirements.txt
+    #   fakeredis
 respx==0.23.1 \
     --hash=sha256:242dcc6ce6b5b9bf621f5870c82a63997e8e82bc7c947f9ffe272b8f3dd5a780 \
     --hash=sha256:b18004b029935384bccfa6d7d9d74b4ec9af73a081cc28600fffc0447f4b8c1a
@@ -915,6 +929,10 @@ ruff==0.17.1 \
     --hash=sha256:bd8f5a55b10f371642eacd0e8665a42a8b97da15c9a7187c79e697b77b5e0ce4 \
     --hash=sha256:ce05e6f3973611d9550a600e04bb531061e368baba31610eb57c1509a8f21a0a
     # via -r requirements-dev.txt
+sortedcontainers==2.4.0 \
+    --hash=sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88 \
+    --hash=sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0
+    # via fakeredis
 starlette==1.7.0 ; python_full_version < '3.11' \
     --hash=sha256:67f8e99895493dd2911a03f11314af6ceebeae4e704bb9f43dfc6a9db151c93e \
     --hash=sha256:c79f74ea63cff761804fbbfb182f1e0b440c2d07b164d24700c5a1bab5d6ff5d
@@ -999,6 +1017,7 @@ typing-extensions==4.16.0 \
     # via
     #   anyio
     #   exceptiongroup
+    #   fakeredis
     #   fastapi
     #   mypy
     #   opentelemetry-api

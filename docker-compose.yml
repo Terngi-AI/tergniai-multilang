@@ -1,4 +1,5 @@
-# Local stack: the API, plus MORENA (free African-language model) with:
+# Local stack: the API and Redis (shared cache, rate limits and conversations).
+# Add MORENA (free African-language model) with:
 #   docker compose --profile morena up
 services:
   api:
@@ -10,6 +11,17 @@ services:
         required: false
     environment:
       MORENA_BASE_URL: http://morena:8080
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.2-alpine
+    # Not published to the host: only the API can reach it
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
+    volumes:
+      - redis-data:/data
     restart: unless-stopped
 
   morena:
@@ -34,3 +46,4 @@ services:
 
 volumes:
   morena-models:
+  redis-data:

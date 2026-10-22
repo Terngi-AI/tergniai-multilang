@@ -252,15 +252,15 @@ def test_made_up_api_keys_cannot_bypass_rate_limit(client, monkeypatch):
     assert statuses == [200, 200, 429, 429]
 
 
-def test_rate_limiter_forgets_idle_clients(monkeypatch):
+async def test_rate_limiter_forgets_idle_clients(monkeypatch):
     now = [0.0]
     monkeypatch.setattr(middleware.time, "monotonic", lambda: now[0])
     limiter = middleware.RateLimiter(limit=5, window=60)
 
     for i in range(999):
-        limiter.hit(f"ip:{i}")
+        await limiter.hit(f"ip:{i}")
     now[0] = 120  # every client has been idle for longer than the window
-    limiter.hit("ip:fresh")  # the 1000th call triggers a sweep
+    await limiter.hit("ip:fresh")  # the 1000th call triggers a sweep
 
     assert set(limiter._hits) == {"ip:fresh"}
 
@@ -281,7 +281,12 @@ def test_ready_when_configured(client):
     response = client.get("/health/ready")
 
     assert response.status_code == 200
-    assert response.json()["services"] == {"translator": True, "llm": True, "agent": True}
+    assert response.json()["services"] == {
+        "translator": True,
+        "llm": True,
+        "agent": True,
+        "storage": True,
+    }
 
 
 def test_not_ready_without_keys(client, monkeypatch):
