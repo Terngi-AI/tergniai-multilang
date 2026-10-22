@@ -123,6 +123,7 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `REDIS_URL` | no | *(in-memory)* | Redis for shared cache, rate limits and conversations, e.g. `redis://localhost:6379/0` |
 | `REDIS_PREFIX` | no | `terngi:` | Prefix for every Redis key |
 | `REDIS_TIMEOUT` | no | `2` | Redis connect/read timeout in seconds |
+| `PROVIDER_DOWN_COOLDOWN_SECONDS` | no | `30` | How long to skip a provider whose server can't be reached |
 | `RATE_LIMIT_MAX_WAIT_SECONDS` | no | `10` | When every model is rate-limited, wait this long for one to free up |
 | `<NAME>_LANGUAGES` | no | all (MORENA: its 14) | Restrict a provider to certain languages |
 | `KEY_COOLDOWN_SECONDS` | no | `60` | How long to skip a rate-limited key |
@@ -179,6 +180,7 @@ TRANSLATION_PROVIDERS=morena,groq,openrouter
 | `POST` | `/v1/converse` | Translate and get an LLM reply |
 | `POST` | `/v1/agent` | The assistant without server memory (send `history` yourself) |
 | `POST` | `/v1/chat` | **Chat** with memory: send `message` and `conversation_id` |
+| `POST` | `/v1/chat/stream` | The same chat, streamed word by word as Server-Sent Events |
 | `GET` / `DELETE` | `/v1/chat/{id}` | Read or forget a conversation |
 | `GET` | `/chat` | Web chat page |
 

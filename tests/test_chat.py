@@ -139,9 +139,7 @@ def test_morena_is_only_used_for_its_languages(client, monkeypatch):
         return_value=httpx.Response(200, json={"content": "Habari"})
     )
     groq_route = respx.post(CHAT_URL).mock(
-        return_value=httpx.Response(
-            200, json={"choices": [{"message": {"content": '{"translations": ["你好"]}'}}]}
-        )
+        return_value=httpx.Response(200, json={"choices": [{"message": {"content": "你好"}}]})
     )
 
     swahili = client.post(

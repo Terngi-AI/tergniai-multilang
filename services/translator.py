@@ -13,7 +13,7 @@ from fastapi import HTTPException
 
 import config
 import metrics
-from services import assistant, azure_translator
+from services import assistant, azure_translator, llm
 from services.store import StoreError, make_store
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,8 @@ def _is_configured(name: str, languages: Sequence[str] = ()) -> bool:
     if name == "azure":
         return bool(config.AZURE_TRANSLATOR_KEYS) and azure_translator.supports(*languages)
     provider = config.LLM_PROVIDERS.get(name)
-    return provider is not None and provider.configured and provider.supports(*languages)
+    # Providers resting after being unreachable are skipped quietly
+    return llm.is_available(name) and provider is not None and provider.supports(*languages)
 
 
 def translation_available() -> bool:

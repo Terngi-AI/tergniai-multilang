@@ -119,7 +119,58 @@ curl -X POST $BASE/v1/chat -H 'Content-Type: application/json' \
 # {"reply": "Aha gị bụ Chidi, ị na-ere tomato.", "language": "ig", ...}
 ```
 
-You can switch languages mid-conversation and it keeps the context. Other calls:
+You can switch languages mid-conversation and it keeps the context.
+
+#### Streaming: `POST /v1/chat/stream`
+
+Same request body, but the reply arrives word by word as
+[Server-Sent Events](https://developer.mozilla.org/docs/Web/API/Server-sent_events), so users see
+text immediately instead of waiting for the whole answer. The web chat at `/chat` uses this.
+
+| Event | Data | Meaning |
+|---|---|---|
+| `start` | `{"conversation_id"}` | The conversation this reply belongs to |
+| `token` | `{"text"}` | The next piece of the reply; append it |
+| `discard` | `{}` | Drop the text streamed so far (the assistant decided to use a tool) |
+| `tool` | `{"tool", "ok"}` | A tool the assistant ran, e.g. `translate` |
+| `done` | `{"conversation_id", "reply", "language", "reply_language", "steps"}` | Finished. **Show `reply`** in place of the streamed text: for non-English replies the final, checked translation can differ from what streamed |
+| `error` | `{"message", "status_code"}` | Something failed after streaming started |
+
+```bash
+curl -N -X POST $BASE/v1/chat/stream -H 'Content-Type: application/json' \
+  -d '{"message": "Explain in three sentences why the sky is blue."}'
+# event: start
+# data: {"conversation_id": "9b1d…"}
+#
+# event: token
+# data: {"text": "The sky appears blue because"}
+# …
+# event: done
+# data: {"conversation_id": "9b1d…", "reply": "The sky appears blue because …", ...}
+```
+
+Python, reading the stream with `httpx`:
+
+```python
+import json, httpx
+
+with httpx.stream("POST", f"{BASE}/v1/chat/stream", json={"message": "Habari!"}, timeout=120) as r:
+    event = None
+    for line in r.iter_lines():
+        if line.startswith("event:"):
+            event = line[6:].strip()
+        elif line.startswith("data:"):
+            data = json.loads(line[5:])
+            if event == "token":
+                print(data["text"], end="", flush=True)
+            elif event == "done":
+                print("\n\nconversation:", data["conversation_id"])
+```
+
+Errors that happen before streaming starts (unknown `conversation_id`, unsupported
+`reply_language`) are normal JSON errors with a 4xx status.
+
+Other calls:
 
 | Call | Purpose |
 |---|---|
