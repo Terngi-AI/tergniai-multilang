@@ -24,6 +24,8 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The Python SDK in clients/python is tested from tests/test_client_sdk.py
+pythonpath = [".", "clients/python"]
 asyncio_mode = "auto"
 addopts = "-ra"
 filterwarnings = ["ignore::DeprecationWarning:fastapi.testclient", "ignore:Using `httpx` with `starlette.testclient`"]

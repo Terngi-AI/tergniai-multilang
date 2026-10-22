@@ -1,54 +1,109 @@
-from typing import Any, Dict, List, Optional
+"""
+Typed request and response models, mirroring the Terngi AI API (see GET /openapi.json)
+"""
+
+from typing import Any, Dict, List, Literal, Optional
+
 from pydantic import BaseModel
+
+# --- Requests ------------------------------------------------------------------------------
+
+
+class Message(BaseModel):
+    """A previous turn in a conversation"""
+
+    role: Literal["user", "assistant"]
+    content: str
 
 
 class ChatRequest(BaseModel):
-    prompt: str
-    system_prompt: Optional[str] = None
-    temperature: Optional[float] = 0.7
-
-
-class ChatResponse(BaseModel):
-    response: str
-    model: Optional[str] = None
-    usage: Optional[Dict[str, Any]] = None
+    message: str
+    conversation_id: Optional[str] = None
+    language: str = "auto"
+    reply_language: Optional[str] = None
 
 
 class TranslateRequest(BaseModel):
-    text: str
-    target_lang: str
-    source_lang: Optional[str] = "auto"
-
-
-class TranslateResponse(BaseModel):
-    translated_text: str
-    detected_source_lang: Optional[str] = None
+    content: str
+    from_language: str = "auto"
+    to_language: str
 
 
 class BatchTranslateRequest(BaseModel):
     texts: List[str]
-    target_lang: str
-    source_lang: Optional[str] = "auto"
+    from_language: str = "auto"
+    to_language: str
+
+
+class DetectRequest(BaseModel):
+    content: str
+
+
+class AgentRequest(BaseModel):
+    message: str
+    language: str = "auto"
+    reply_language: Optional[str] = None
+    history: Optional[List[Message]] = None
+
+
+# --- Responses -----------------------------------------------------------------------------
+
+
+class AgentStep(BaseModel):
+    """A tool the assistant ran while answering"""
+
+    tool: str
+    arguments: Any = None
+    output: Dict[str, Any] = {}
+
+
+class ChatResponse(BaseModel):
+    conversation_id: str
+    reply: str
+    language: str
+    reply_language: str
+    steps: List[AgentStep] = []
+
+
+class Conversation(BaseModel):
+    conversation_id: str
+    messages: List[Message]
+
+
+class TranslateResponse(BaseModel):
+    translated_text: str
+    from_language: str
+    to_language: str
+    original_text: str
 
 
 class BatchTranslateResponse(BaseModel):
     translations: List[str]
-
-
-class DetectRequest(BaseModel):
-    text: str
+    from_language: str
+    to_language: str
 
 
 class DetectResponse(BaseModel):
     language: str
-    confidence: Optional[float] = None
-
-
-class AgentRequest(BaseModel):
-    task: str
-    context: Optional[Dict[str, Any]] = None
+    language_name: Optional[str] = None
+    score: float
+    is_supported: bool
 
 
 class AgentResponse(BaseModel):
-    result: Any
-    steps_taken: Optional[List[Dict[str, Any]]] = None
+    answer: str
+    language: str
+    reply_language: str
+    steps: List[AgentStep] = []
+
+
+class StreamEvent(BaseModel):
+    """
+    One Server-Sent Event from POST /v1/chat/stream
+
+    event is "start", "token", "discard", "tool", "done" or "error". For "done", show
+    data["reply"]: it is the final text and can differ from the streamed tokens.
+    """
+
+    event: str
+    data: Dict[str, Any]
