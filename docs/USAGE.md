@@ -281,6 +281,12 @@ curl -X POST $BASE/v1/agent -H 'Content-Type: application/json' \
 `steps` shows exactly which tools ran and what they returned, which helps with debugging
 and building UIs. See [AGENT.md](AGENT.md) for how it works and how to add tools.
 
+### 📱 WhatsApp bot: `/v1/whatsapp/*`
+
+Connect a WhatsApp Business number and people can chat with Terngi AI there, in their own
+language. `POST /v1/whatsapp/send` sends messages (translated if you like). Setup and
+details: [WHATSAPP.md](WHATSAPP.md).
+
 ### Python client
 
 ```python

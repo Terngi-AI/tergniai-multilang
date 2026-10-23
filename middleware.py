@@ -25,6 +25,8 @@ CallNext = Callable[[Request], Awaitable[Response]]
 # Paths that never require an API key or count towards the rate limit
 PUBLIC_PATHS = {
     "/chat",
+    # Meta calls it; every request is verified by its signature instead of an API key
+    "/v1/whatsapp/webhook",
     "/",
     "/health",
     "/health/ready",

@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **WhatsApp bot** (`/v1/whatsapp/webhook`): people message your WhatsApp number in any
+  supported language and get answers in that language from the agent, with memory (in
+  memory or Redis). Commands: `LANGUAGE`, `RESET`, `HELP`. Webhooks are verified by Meta's
+  signature, repeated deliveries are answered once, phone numbers are stored as hashes.
+  `WHATSAPP_CONTEXT` gives the bot facts to answer from. See `docs/WHATSAPP.md`
+- `POST /v1/whatsapp/send`: send text (optionally translated) or an approved template
+- The agent accepts an optional `context` with facts from the operator
 
 ### Security
 - `certifi` upgraded to 2026.10.19 (PYSEC-2026-4320).

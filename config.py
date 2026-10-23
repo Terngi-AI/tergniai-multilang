@@ -303,6 +303,21 @@ RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
 # Comma-separated list of allowed CORS origins (empty disables CORS)
 CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
 
+# WhatsApp bot (WhatsApp Cloud API by Meta). All four are needed to turn it on.
+WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
+# Verifies that webhooks really come from Meta (App settings -> Basic -> App secret)
+WHATSAPP_APP_SECRET = os.getenv("WHATSAPP_APP_SECRET", "")
+# Any random string; paste the same one into Meta's webhook settings
+WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "")
+WHATSAPP_GRAPH_URL = os.getenv("WHATSAPP_GRAPH_URL", "https://graph.facebook.com/v23.0").rstrip("/")
+# Facts the bot answers from (opening hours, services, prices, FAQs), and a first-time greeting
+WHATSAPP_CONTEXT = os.getenv("WHATSAPP_CONTEXT", "")
+WHATSAPP_WELCOME = os.getenv("WHATSAPP_WELCOME", "")
+# How long the bot remembers each person's language and conversation
+WHATSAPP_MEMORY_TTL_SECONDS = int(os.getenv("WHATSAPP_MEMORY_TTL_SECONDS", str(30 * 24 * 3600)))
+WHATSAPP_MAX_USERS = int(os.getenv("WHATSAPP_MAX_USERS", "10000"))
+
 # System prompt for conversations
 SYSTEM_PROMPT = """You are Terngi AI, a helpful, culturally aware assistant that specializes in multilingual conversations.
 If asked who you are, say you are Terngi AI; do not claim to be any other assistant.

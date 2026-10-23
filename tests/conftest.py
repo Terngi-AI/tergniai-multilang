@@ -38,7 +38,7 @@ def reset_state(monkeypatch):
     """
     import config
     from middleware import rate_limiter
-    from services import conversations
+    from services import conversations, whatsapp
     from services.keypool import key_pool
     from services.translator import translation_cache
 
@@ -67,8 +67,10 @@ def reset_state(monkeypatch):
     rate_limiter.reset()
     key_pool.reset()
     conversations.clear()
+    whatsapp.clear()
     yield
     translation_cache.clear()
     rate_limiter.reset()
     key_pool.reset()
     conversations.clear()
+    whatsapp.clear()

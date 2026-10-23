@@ -143,3 +143,29 @@ class ConversationHistory(BaseModel):
 
     conversation_id: str
     messages: List[MemoryMessage]
+
+
+class WhatsAppTemplate(BaseModel):
+    """An approved WhatsApp template (needed to message someone first, or after 24 hours)"""
+
+    name: str = Field(..., min_length=1, max_length=512)
+    language: str = Field("en", description="The template's WhatsApp language code, e.g. en_GB")
+    parameters: List[str] = Field(default_factory=list, description="Values for its body variables")
+
+
+class WhatsAppSendRequest(BaseModel):
+    """Send a WhatsApp message, optionally translated into the recipient's language"""
+
+    to: str = Field(..., description="Phone number with country code, e.g. +447700900123")
+    text: Optional[str] = Field(None, min_length=1, max_length=20000)
+    from_language: str = Field("en", description="Language of `text`")
+    to_language: Optional[str] = Field(
+        None, description="Translate `text` into this language first"
+    )
+    template: Optional[WhatsAppTemplate] = None
+
+
+class WhatsAppSendResponse(BaseModel):
+    to: str
+    message_ids: List[str]
+    text: Optional[str] = None

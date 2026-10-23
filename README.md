@@ -39,6 +39,9 @@ built in the open so native speakers and developers can improve it together.
 - **Multiple providers, models and keys** — Azure, Groq, OpenRouter, Together, Cerebras,
   Hugging Face, Ollama or MORENA, tried in order; keys rotate and failing keys, models or
   providers are skipped automatically
+- **WhatsApp bot**: people message your WhatsApp number in any supported language and get
+  answers in that language, with memory; plus an endpoint to send messages. See
+  [docs/WHATSAPP.md](docs/WHATSAPP.md)
 - **Free, local African-language model** — run [MORENA](docs/MORENA.md) with llama.cpp
 - **Translate** text between any two supported languages, one at a time or in batches
 - **Auto-detect** the source language — pass `"from_language": "auto"` to any endpoint
@@ -135,6 +138,7 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `MAX_CONTENT_LENGTH` | no | `5000` | Max characters per message |
 | `MAX_MEMORY_MESSAGES` | no | `20` | Max turns in `memory_context` |
 | `API_KEYS` | no | *(auth disabled)* | Comma-separated client keys accepted in `X-API-Key` |
+| `WHATSAPP_*` | no | *(off)* | WhatsApp bot settings, see [docs/WHATSAPP.md](docs/WHATSAPP.md) |
 | `RATE_LIMIT_PER_MINUTE` | no | `60` | Requests per minute per client; `0` disables |
 | `CACHE_TTL_SECONDS` | no | `3600` | Translation cache lifetime; `0` disables |
 | `CACHE_MAX_ITEMS` | no | `1000` | Max cached translations |
@@ -279,6 +283,16 @@ curl -X POST http://localhost:8000/v1/converse \
           {"role": "assistant", "content": "Nice to meet you, Ada!"}
         ]
       }'
+```
+
+### WhatsApp
+
+Connect a WhatsApp number and Terngi AI answers people there in their own language. Setup,
+commands and sending: [docs/WHATSAPP.md](docs/WHATSAPP.md).
+
+```bash
+curl -X POST http://localhost:8000/v1/whatsapp/send -H 'Content-Type: application/json' \
+  -d '{"to": "+447700900123", "text": "Your order is ready.", "to_language": "yo"}'
 ```
 
 Errors use one shape:

@@ -253,6 +253,7 @@ async def run_agent(
     reply_language: Optional[str] = None,
     history: Optional[List[Dict[str, str]]] = None,
     on_event: Optional[OnEvent] = None,
+    context: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Run the agent on a user message
@@ -265,6 +266,7 @@ async def run_agent(
         on_event: If given, the answer is streamed. Receives ("token", {"text"}) as text
             arrives, ("discard", {}) when streamed text turns out to precede tool calls and
             should be dropped, and ("tool", {"tool", "ok"}) for each tool that runs
+        context: Facts from the operator to answer from (e.g. a business's opening hours)
 
     Returns:
         Dict with the answer, the languages used and the tool steps taken
@@ -284,7 +286,12 @@ async def run_agent(
             f"[English translation]\n{english}"
         )
 
-    messages: List[Dict[str, Any]] = [{"role": "system", "content": _system_prompt(reply)}]
+    system = _system_prompt(reply)
+    if context:
+        system += (
+            f"\n\nInformation from the operator of this service, to use when relevant:\n{context}"
+        )
+    messages: List[Dict[str, Any]] = [{"role": "system", "content": system}]
     for turn in history or []:
         if turn.get("role") in ("user", "assistant") and turn.get("content"):
             messages.append({"role": turn["role"], "content": turn["content"]})
