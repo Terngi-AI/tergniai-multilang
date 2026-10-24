@@ -25,7 +25,7 @@ For larger changes, open an issue first so we can agree on the approach before y
 git clone https://github.com/<you>/tergniai-multilang.git
 cd tergniai-multilang
 
-# 2. Create a virtual environment (Python 3.10+)
+# 2. Create a virtual environment (Python 3.11+)
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
@@ -76,7 +76,7 @@ maintainer must approve.
 
 ## Pull request checklist
 
-- CI is green (lint, types, tests on Python 3.10–3.13, Docker build, security scans).
+- CI is green (lint, types, tests on Python 3.11–3.13, Docker build, security scans).
 - Coverage stays at or above 85%.
 - New behaviour is documented in `README.md`.
 - No secrets, `.env` files or large binaries are committed.
@@ -105,8 +105,8 @@ This project doesn't use Dependabot, so dependencies are updated by hand:
   After changing `requirements*.txt`, or to pick up security fixes, regenerate both and audit them:
 
   ```bash
-  uv pip compile requirements.txt --universal --python-version 3.10 --generate-hashes -o requirements.lock
-  uv pip compile requirements-dev.txt --universal --python-version 3.10 --generate-hashes -o requirements-dev.lock
+  uv pip compile requirements.txt --universal --python-version 3.11 --generate-hashes -o requirements.lock
+  uv pip compile requirements-dev.txt --universal --python-version 3.11 --generate-hashes -o requirements-dev.lock
   pip-audit --strict --require-hashes --disable-pip -r requirements-dev.lock
   ```
 

@@ -4,7 +4,7 @@
 [![Security](https://github.com/Terngi-AI/tergniai-multilang/actions/workflows/security.yml/badge.svg)](https://github.com/Terngi-AI/tergniai-multilang/actions/workflows/security.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Terngi-AI/tergniai-multilang/badge)](https://scorecard.dev/viewer/?uri=github.com/Terngi-AI/tergniai-multilang)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Python](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue)
+![Python](https://img.shields.io/badge/python-3.11%E2%80%933.13-blue)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Good first issues](https://img.shields.io/github/issues/Terngi-AI/tergniai-multilang/good%20first%20issue?label=good%20first%20issues&color=7057ff)](https://github.com/Terngi-AI/tergniai-multilang/labels/good%20first%20issue)
 [![GitHub stars](https://img.shields.io/github/stars/Terngi-AI/tergniai-multilang?style=social)](https://github.com/Terngi-AI/tergniai-multilang/stargazers)
@@ -58,7 +58,7 @@ built in the open so native speakers and developers can improve it together.
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - At least one provider: a [Groq API key](https://console.groq.com/keys) (free tier),
   [MORENA running locally](docs/MORENA.md) (free), an Azure Translator key, or any
   OpenAI-compatible API
@@ -323,7 +323,7 @@ mypy .
 pre-commit install    # run checks automatically on every commit
 ```
 
-CI runs lint, type checks, tests on Python 3.10–3.13 and a Docker smoke test on every pull
+CI runs lint, type checks, tests on Python 3.11–3.13 and a Docker smoke test on every pull
 request. A separate security workflow scans for malware, secrets, insecure code, vulnerable
 dependencies and container issues, and runs simulated attacks against the API, on every PR and
 daily. See [SECURITY.md](SECURITY.md#automated-security-scanning).

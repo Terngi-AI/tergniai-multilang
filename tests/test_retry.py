@@ -2,7 +2,7 @@
 Tests for retrying upstream calls with exponential backoff
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 from typing import List
 
@@ -121,7 +121,7 @@ def test_azure_honours_retry_after_seconds(client, sleeps):
 
 @respx.mock
 def test_azure_honours_retry_after_http_date(client, sleeps):
-    when = format_datetime(datetime.now(timezone.utc) + timedelta(seconds=3), usegmt=True)
+    when = format_datetime(datetime.now(UTC) + timedelta(seconds=3), usegmt=True)
     respx.post(TRANSLATE_URL).mock(
         side_effect=[httpx.Response(503, headers={"Retry-After": when}), azure_ok()]
     )
@@ -168,7 +168,7 @@ def test_parse_retry_after(header, expected):
 
 
 def test_parse_retry_after_past_date_is_zero():
-    past = format_datetime(datetime.now(timezone.utc) - timedelta(minutes=5), usegmt=True)
+    past = format_datetime(datetime.now(UTC) - timedelta(minutes=5), usegmt=True)
     assert azure_translator._parse_retry_after(past) == 0.0
 
 
