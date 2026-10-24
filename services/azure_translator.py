@@ -2,7 +2,6 @@
 Azure Translator service for the Terngi Translation API
 """
 
-import asyncio
 import logging
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
@@ -12,6 +11,7 @@ from fastapi import HTTPException
 
 import config
 import metrics
+from services import deadline
 from services.keypool import key_pool, mask
 from services.retry import RETRY_STATUS_CODES
 from services.retry import parse_retry_after as _parse_retry_after
@@ -69,11 +69,16 @@ async def _call_azure(path: str, params: Dict[str, str], texts: List[str]) -> An
     async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
         attempt = 0
         while True:
+            deadline.consume_attempt()
             key = keys[0]
             response: Optional[httpx.Response] = None
             try:
                 response = await client.post(
-                    url, params={"api-version": "3.0", **params}, headers=_headers(key), json=body
+                    url,
+                    params={"api-version": "3.0", **params},
+                    headers=_headers(key),
+                    json=body,
+                    timeout=deadline.timeout(config.REQUEST_TIMEOUT),
                 )
             except httpx.HTTPError as e:
                 retryable = isinstance(e, httpx.TransportError)
@@ -115,7 +120,7 @@ async def _call_azure(path: str, params: Dict[str, str], texts: List[str]) -> An
                 attempt,
                 config.UPSTREAM_MAX_RETRIES,
             )
-            await asyncio.sleep(delay)
+            await deadline.sleep(delay)
 
     # Upstream errors are logged but not leaked to the client
     if response is None or response.status_code != 200:

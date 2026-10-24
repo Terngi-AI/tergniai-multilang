@@ -2,6 +2,7 @@
 HTTP middleware: request IDs, client authentication and rate limiting
 """
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -16,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 import config
 import metrics
+from services import deadline as request_deadline
 from services.store import RedisRateLimiter, using_redis
 
 logger = logging.getLogger(__name__)
@@ -37,6 +39,11 @@ PUBLIC_PATHS = {
     "/openapi.json",
 }
 
+# Paths that must not be cut by the hard request deadline. The WhatsApp webhook answers Meta
+# at once and does the real work in background tasks, which get their own budget in
+# services.whatsapp.handle.
+DEADLINE_EXEMPT_PATHS = {"/v1/whatsapp/webhook"}
+
 
 def error_response(status_code: int, message: str, headers: Optional[dict] = None) -> JSONResponse:
     """Build an error in the same envelope as the HTTPException handler"""
@@ -45,6 +52,62 @@ def error_response(status_code: int, message: str, headers: Optional[dict] = Non
         content={"error": True, "message": message, "status_code": status_code},
         headers=headers,
     )
+
+
+class DeadlineMiddleware:
+    """Give every HTTP request one wall-clock and upstream-attempt budget"""
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Dict[str, Any], receive: Any, send: Any) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = str(scope.get("path", ""))
+        normalized_path = path.rstrip("/") or "/"
+        streaming = normalized_path.endswith("/stream")
+        exempt = normalized_path in DEADLINE_EXEMPT_PATHS
+        seconds = config.STREAM_DEADLINE_SECONDS if streaming else config.REQUEST_DEADLINE_SECONDS
+        tokens = request_deadline.begin(seconds)
+        started = False
+
+        async def tracked_send(message: Dict[str, Any]) -> None:
+            nonlocal started
+            if message.get("type") == "http.response.start":
+                started = True
+            await send(message)
+
+        try:
+            if seconds > 0 and not streaming and not exempt:
+                # Hard stop for JSON responses; services also check the budget so they can
+                # clean up before this fires. Streams report the deadline as an error event,
+                # and background work (the WhatsApp webhook) starts its own budget.
+                try:
+                    await asyncio.wait_for(self.app(scope, receive, tracked_send), seconds)
+                except TimeoutError:
+                    if not started:
+                        headers = {"Retry-After": "1"}
+                        headers.update(security_headers_for(path, str(scope.get("scheme", "http"))))
+                        request_id = (scope.get("state") or {}).get("request_id")
+                        if request_id:
+                            headers["X-Request-ID"] = request_id
+                        response = JSONResponse(
+                            status_code=504,
+                            content={
+                                "error": True,
+                                "message": "Request deadline exceeded",
+                                "code": "gateway_timeout",
+                                "status_code": 504,
+                            },
+                            headers=headers,
+                        )
+                        await response(scope, receive, send)
+            else:
+                await self.app(scope, receive, tracked_send)
+        finally:
+            request_deadline.end(tokens)
 
 
 class RateLimiter:

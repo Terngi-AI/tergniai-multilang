@@ -2,7 +2,9 @@
 Tests for streaming chat (POST /v1/chat/stream) and streamed LLM calls
 """
 
+import asyncio
 import json
+import time
 
 import httpx
 import pytest
@@ -173,6 +175,24 @@ def test_errors_are_sent_as_events(client, monkeypatch):
 
     assert [e for e, _ in got] == ["start", "error"]
     assert got[1][1] == {"message": "Agent is not configured", "status_code": 503}
+
+
+def test_stream_ends_with_an_error_event_at_the_deadline(client, monkeypatch):
+    async def stuck_agent(*args, **kwargs):
+        await asyncio.sleep(2)
+        return {"answer": "late", "language": "en", "reply_language": "en", "steps": []}
+
+    monkeypatch.setattr(config, "STREAM_DEADLINE_SECONDS", 0.05)
+    monkeypatch.setattr("routes.chat.run_agent", stuck_agent)
+
+    started = time.monotonic()
+    got = events(ask(client))
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 1  # the stream ends on the deadline, not when the agent returns
+    assert [event for event, _ in got] == ["start", "error"]
+    assert got[-1][1]["status_code"] == 504
+    assert "deadline" in got[-1][1]["message"].lower()
 
 
 @pytest.mark.asyncio

@@ -39,6 +39,8 @@ app.middleware("http")(middleware.authenticate)
 app.middleware("http")(middleware.request_context)
 app.middleware("http")(middleware.security_headers)
 app.add_middleware(middleware.BodySizeLimitMiddleware, max_bytes=MAX_REQUEST_BYTES)
+# Outermost: the deadline covers authentication, handlers and streamed responses
+app.add_middleware(middleware.DeadlineMiddleware)
 
 if CORS_ORIGINS:
     app.add_middleware(

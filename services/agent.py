@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import HTTPException
 
 import config
-from services import llm, translator
+from services import deadline, llm, translator
 from services.languages import resolve_source_language
 from services.text import normalize_text
 
@@ -303,6 +303,7 @@ async def run_agent(
     tools = tool_definitions()
 
     for _ in range(config.AGENT_MAX_STEPS):
+        deadline.check()
         streamed = False
 
         async def on_token(text: str) -> None:
@@ -319,6 +320,7 @@ async def run_agent(
             temperature=0.3,
             on_token=on_token if on_event is not None else None,
         )
+        deadline.check()
         if step["tool_calls"] and streamed and on_event is not None:
             await on_event("discard", {})
         if not step["tool_calls"]:
@@ -338,6 +340,7 @@ async def run_agent(
             }
         )
         for index, call in enumerate(step["tool_calls"]):
+            deadline.check()
             function = call.get("function") or {}
             name = str(function.get("name", ""))
             raw_arguments = function.get("arguments", "{}")
@@ -370,8 +373,11 @@ async def run_agent(
         messages,
         parse=lambda text: _parse_step({"content": text})["content"],
     )
+    deadline.check()
+    answer = await _finalise_answer(answer, reply, steps)
+    deadline.check()
     return {
-        "answer": await _finalise_answer(answer, reply, steps),
+        "answer": answer,
         "language": source,
         "reply_language": reply,
         "steps": steps,

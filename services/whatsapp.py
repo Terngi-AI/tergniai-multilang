@@ -8,7 +8,6 @@ Webhooks are only accepted with a valid signature from Meta. Phone numbers are s
 as hashes, and memory expires after WHATSAPP_MEMORY_TTL_SECONDS.
 """
 
-import asyncio
 import hashlib
 import hmac
 import logging
@@ -19,7 +18,7 @@ import httpx
 from fastapi import HTTPException
 
 import config
-from services import conversations
+from services import conversations, deadline
 from services.agent import run_agent
 from services.retry import RETRY_STATUS_CODES, retry_delay
 from services.store import StoreError, make_store
@@ -114,8 +113,14 @@ async def _post(payload: Dict[str, Any]) -> str:
     body = {"messaging_product": "whatsapp", **payload}
     async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
         for attempt in range(config.UPSTREAM_MAX_RETRIES + 1):
+            deadline.consume_attempt()
             try:
-                response = await client.post(url, json=body, headers=headers)
+                response = await client.post(
+                    url,
+                    json=body,
+                    headers=headers,
+                    timeout=deadline.timeout(config.REQUEST_TIMEOUT),
+                )
             except httpx.HTTPError as e:
                 raise WhatsAppError(f"Can't reach WhatsApp: {type(e).__name__}") from e
             if response.status_code not in RETRY_STATUS_CODES:
@@ -123,7 +128,7 @@ async def _post(payload: Dict[str, Any]) -> str:
             delay = retry_delay(attempt, response)
             if delay is None or attempt == config.UPSTREAM_MAX_RETRIES:
                 break
-            await asyncio.sleep(delay)
+            await deadline.sleep(delay)
     if response.status_code != 200:
         try:
             detail = response.json().get("error", {}).get("message", "")
@@ -258,12 +263,17 @@ async def reply_to(message: Dict[str, Any]) -> Optional[str]:
 
 async def handle(message: Dict[str, Any]) -> None:
     """Answer one incoming message (runs after the webhook has returned)"""
+    # Background tasks run inside the webhook's ASGI call. Give this delivery its own
+    # budget so it is neither cut off nor judged against the time Meta's request took.
+    tokens = deadline.begin(config.REQUEST_DEADLINE_SECONDS)
     try:
         answer = await reply_to(message)
         if answer:
             await send_text(str(message.get("from", "")), answer)
     except (WhatsAppError, StoreError, HTTPException) as e:
         logger.warning("WhatsApp reply failed: %s", e)
+    finally:
+        deadline.end(tokens)
 
 
 def clear() -> None:

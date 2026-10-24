@@ -6,7 +6,6 @@ then that provider's keys in rotation. A key that is rejected (401/403) or rate-
 (429) is put on cooldown; a model that errors or returns unusable output is skipped.
 """
 
-import asyncio
 import json
 import logging
 import time
@@ -18,6 +17,7 @@ from fastapi import HTTPException
 import config
 import metrics
 from config import LLMProvider
+from services import deadline
 from services.keypool import key_pool, mask, retry_after_seconds
 from services.retry import RETRY_STATUS_CODES, retry_delay
 
@@ -94,8 +94,14 @@ async def _post(url: str, headers: Dict[str, str], body: Dict[str, Any]) -> http
     attempt = 0
     async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
         while True:
+            deadline.consume_attempt()
             try:
-                response = await client.post(url, headers=headers, json=body)
+                response = await client.post(
+                    url,
+                    headers=headers,
+                    json=body,
+                    timeout=deadline.timeout(config.REQUEST_TIMEOUT),
+                )
             except httpx.HTTPError as e:
                 delay = retry_delay(attempt, None) if isinstance(e, httpx.TransportError) else None
                 if delay is None or attempt >= config.UPSTREAM_MAX_RETRIES:
@@ -121,7 +127,7 @@ async def _post(url: str, headers: Dict[str, str], body: Dict[str, Any]) -> http
                 attempt,
                 config.UPSTREAM_MAX_RETRIES,
             )
-            await asyncio.sleep(delay)
+            await deadline.sleep(delay)
 
 
 def _check_status(response: httpx.Response, provider: str, key: Optional[str]) -> None:
@@ -157,13 +163,21 @@ async def _stream_chat(
     """
     content: List[str] = []
     tool_calls: Dict[int, Dict[str, Any]] = {}
+    deadline.consume_attempt()
     try:
         async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
-            async with client.stream("POST", url, headers=headers, json=body) as response:
+            async with client.stream(
+                "POST",
+                url,
+                headers=headers,
+                json=body,
+                timeout=deadline.timeout(config.REQUEST_TIMEOUT),
+            ) as response:
                 if response.status_code != 200:
                     await response.aread()
                     _check_status(response, provider, key)
                 async for line in response.aiter_lines():
+                    deadline.check()
                     if not line.startswith("data:"):
                         continue
                     data = line[len("data:") :].strip()
@@ -325,9 +339,10 @@ async def complete_message(
 
     # Models that failed for reasons other than rate limits are not retried
     failed: Set[Tuple[str, str]] = set()
-    deadline = time.monotonic() + config.RATE_LIMIT_MAX_WAIT_SECONDS
+    wait_until = time.monotonic() + config.RATE_LIMIT_MAX_WAIT_SECONDS
 
     while True:
+        deadline.check()
         # Shortest wait until a rate-limited key/model becomes usable again
         soonest: Optional[float] = None
 
@@ -349,6 +364,7 @@ async def complete_message(
                         wait = key_pool.wait_time(key, model)
                         soonest = wait if soonest is None else min(soonest, wait)
                         continue
+                    deadline.check()
                     try:
                         with metrics.track_upstream(name):
                             message = await _call(
@@ -389,6 +405,7 @@ async def complete_message(
                         if e.per_model:
                             soonest = e.cooldown if soonest is None else min(soonest, e.cooldown)
                         continue
+                    deadline.check()
                     try:
                         return parse(message)
                     except ValueError as e:
@@ -401,10 +418,10 @@ async def complete_message(
                         break
 
         # Everything left is rate-limited: wait briefly if a slot frees up soon enough
-        if soonest is None or time.monotonic() + soonest > deadline:
+        if soonest is None or time.monotonic() + soonest > wait_until:
             break
         logger.info("All models are rate-limited; waiting %.1fs before retrying", soonest)
-        await asyncio.sleep(max(soonest, 0.05))
+        await deadline.sleep(max(soonest, 0.05))
 
     raise HTTPException(status_code=502, detail="Error connecting to language model service")
 

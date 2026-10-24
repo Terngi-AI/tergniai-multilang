@@ -365,7 +365,8 @@ Every error has the same shape:
 | `422` | Invalid request body (details in `details`) |
 | `429` | Rate limit exceeded; wait `Retry-After` seconds |
 | `502` | Every configured provider failed |
-| `503` | No provider is configured for this task |
+| `503` | No provider is configured for this task, or the request used its upstream-attempt budget |
+| `504` | The request exceeded `REQUEST_DEADLINE_SECONDS` / `STREAM_DEADLINE_SECONDS`; wait `Retry-After` seconds |
 
 Every response carries `X-Request-ID` (send your own to trace a request) and
 `X-RateLimit-Remaining`.

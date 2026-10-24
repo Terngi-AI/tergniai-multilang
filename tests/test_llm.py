@@ -361,7 +361,7 @@ async def test_waits_briefly_when_everything_is_rate_limited(providers, monkeypa
         slept.append(seconds)
         key_pool.reset()  # time passes: the cooldown is over
 
-    monkeypatch.setattr("services.llm.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("services.deadline.sleep", fake_sleep)
     providers(provider("groq", GROQ, keys=("only-key",), models=("m1",)))
     respx.post(GROQ + "/chat/completions").mock(
         side_effect=[httpx.Response(429, headers={"retry-after": "2"}), reply("after waiting")]
@@ -379,7 +379,7 @@ async def test_does_not_wait_beyond_the_limit(providers, monkeypatch):
     async def fake_sleep(seconds):
         slept.append(seconds)
 
-    monkeypatch.setattr("services.llm.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("services.deadline.sleep", fake_sleep)
     providers(provider("groq", GROQ, keys=("only-key",), models=("m1",)))
     respx.post(GROQ + "/chat/completions").mock(
         return_value=httpx.Response(429, headers={"retry-after": "60"})

@@ -31,7 +31,7 @@ def sleeps(monkeypatch) -> List[float]:
     async def fake_sleep(delay: float) -> None:
         recorded.append(delay)
 
-    monkeypatch.setattr(azure_translator.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr("services.deadline.sleep", fake_sleep)
     monkeypatch.setattr(config, "UPSTREAM_MAX_RETRIES", 2)
     monkeypatch.setattr(config, "UPSTREAM_RETRY_BASE_DELAY", 0.5)
     monkeypatch.setattr(config, "UPSTREAM_RETRY_MAX_DELAY", 10.0)

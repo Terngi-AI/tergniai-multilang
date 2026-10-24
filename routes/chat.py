@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 
 from middleware import client_id
 from models import ChatRequest, ChatResponse, ConversationHistory, MemoryMessage
-from services import conversations
+from services import conversations, deadline
 from services.agent import run_agent
 from services.languages import validate_language
 
@@ -65,12 +65,14 @@ async def chat(request: ChatRequest, http_request: Request):
         logger.exception("Unexpected chat error")
         raise HTTPException(status_code=500, detail="Chat error") from e
 
+    deadline.check()
     await conversations.append(
         conversation_id,
         owner,
         {"role": "user", "content": request.message},
         {"role": "assistant", "content": result["answer"]},
     )
+    deadline.check()
 
     return ChatResponse(
         conversation_id=conversation_id,
@@ -110,12 +112,14 @@ async def chat_stream(request: ChatRequest, http_request: Request):
                 history=history,
                 on_event=on_event,
             )
+            deadline.check()
             await conversations.append(
                 conversation_id,
                 owner,
                 {"role": "user", "content": request.message},
                 {"role": "assistant", "content": result["answer"]},
             )
+            deadline.check()
             await events.put(
                 (
                     "done",
@@ -140,7 +144,28 @@ async def chat_stream(request: ChatRequest, http_request: Request):
         task = asyncio.create_task(run())
         try:
             yield _sse("start", {"conversation_id": conversation_id})
-            while (item := await events.get()) is not None:
+            while True:
+                left = deadline.remaining()
+                if left is not None and left <= 0:
+                    yield _sse(
+                        "error",
+                        {"message": "Request deadline exceeded", "status_code": 504},
+                    )
+                    break
+                try:
+                    item = (
+                        await asyncio.wait_for(events.get(), timeout=left)
+                        if left is not None
+                        else await events.get()
+                    )
+                except TimeoutError:
+                    yield _sse(
+                        "error",
+                        {"message": "Request deadline exceeded", "status_code": 504},
+                    )
+                    break
+                if item is None:
+                    break
                 yield _sse(*item)
         finally:
             if not task.done():  # the client went away: stop generating

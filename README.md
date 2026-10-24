@@ -140,6 +140,9 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `KEY_COOLDOWN_SECONDS` | no | `60` | How long to skip a rate-limited key |
 | `INVALID_KEY_COOLDOWN_SECONDS` | no | `3600` | How long to skip a rejected key |
 | `REQUEST_TIMEOUT` | no | `30` | Upstream timeout in seconds |
+| `REQUEST_DEADLINE_SECONDS` | no | `55` | Whole-request wall-clock budget for JSON responses; retries, fallbacks and agent steps share it (`0` disables) |
+| `STREAM_DEADLINE_SECONDS` | no | `120` | Whole-request budget for streaming responses (`0` disables) |
+| `REQUEST_MAX_UPSTREAM_ATTEMPTS` | no | `20` | Maximum upstream requests per API request, retries and fallbacks included (`0` disables) |
 | `UPSTREAM_MAX_RETRIES` | no | `2` | Retries for upstream `5xx`/connection errors (all providers) and Azure `429`s; `0` disables. LLM `429`s rotate to the next key or model instead |
 | `UPSTREAM_RETRY_BASE_DELAY` | no | `0.5` | First backoff step in seconds; doubles each retry, with full jitter |
 | `UPSTREAM_RETRY_MAX_DELAY` | no | `10` | Longest wait between retries; a longer `Retry-After` fails fast |
@@ -166,6 +169,13 @@ each model is tried in order, and keys rotate between requests. A key that is re
 (401/403) or rate-limited (429) is skipped for a while; a model that errors or returns
 unusable output is skipped for that request. The app starts without keys; endpoints with
 no configured provider return `503`.
+
+JSON requests share one `REQUEST_DEADLINE_SECONDS` wall-clock budget and one
+`REQUEST_MAX_UPSTREAM_ATTEMPTS` cap across retries, provider fallbacks and agent steps.
+Streaming responses use `STREAM_DEADLINE_SECONDS`. Exhausting the deadline returns `504`;
+exhausting the attempt cap returns `503`, both with `Retry-After`. The WhatsApp webhook is
+excluded from the hard request deadline because Meta must get an immediate answer; each
+background reply starts its own `REQUEST_DEADLINE_SECONDS` budget.
 
 Example, using two Groq keys, OpenRouter as a backup and MORENA for translation:
 

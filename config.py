@@ -273,6 +273,13 @@ PROVIDER_DOWN_COOLDOWN_SECONDS = float(os.getenv("PROVIDER_DOWN_COOLDOWN_SECONDS
 # Timeout (seconds) for calls to upstream services
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "30"))
 
+# Whole-request budgets. Every provider, retry and agent step shares one deadline.
+# 0 disables the deadline (and the upstream attempt cap).
+REQUEST_DEADLINE_SECONDS = float(os.getenv("REQUEST_DEADLINE_SECONDS", "55"))
+STREAM_DEADLINE_SECONDS = float(os.getenv("STREAM_DEADLINE_SECONDS", "120"))
+# Maximum upstream requests (retries and fallbacks included) per HTTP request.
+REQUEST_MAX_UPSTREAM_ATTEMPTS = int(os.getenv("REQUEST_MAX_UPSTREAM_ATTEMPTS", "20"))
+
 # Retries for upstream 429/5xx responses and connection errors (0 disables).
 # Backoff is exponential with full jitter; a Retry-After header is honoured.
 UPSTREAM_MAX_RETRIES = int(os.getenv("UPSTREAM_MAX_RETRIES", "2"))
