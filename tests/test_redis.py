@@ -206,16 +206,20 @@ def test_chat_returns_503_when_conversation_storage_is_down(client, redis_down):
 # --- Readiness -----------------------------------------------------------------------------
 
 
-def test_readiness_reports_redis(client, redis):
-    response = client.get("/health/ready")
+def test_readiness_reports_redis(client, redis, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["secret"])
+
+    response = client.get("/health/ready", headers={"X-API-Key": "secret"})
 
     assert response.status_code == 200
     assert response.json()["status"] == "ready"
     assert response.json()["services"]["storage"] is True
 
 
-def test_readiness_degrades_when_redis_is_down(client, redis_down):
-    response = client.get("/health/ready")
+def test_readiness_degrades_when_redis_is_down(client, redis_down, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["secret"])
+
+    response = client.get("/health/ready", headers={"X-API-Key": "secret"})
 
     assert response.status_code == 200
     assert response.json()["status"] == "degraded"

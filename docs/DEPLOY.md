@@ -79,7 +79,12 @@ instance.
    ```
 
    `/health` is a liveness probe and always returns quickly. `/health/ready` returns
-   `ready`, `degraded`, or `not_ready` (HTTP 503 when no core provider is configured).
+   `ready`, `degraded`, or `not_ready` (HTTP 503 when no core provider is configured);
+   with `API_KEYS` set, add the key to see the per-service details:
+
+   ```bash
+   curl -H "X-API-Key: <key>" https://YOUR-SERVICE.onrender.com/health/ready
+   ```
 
 7. Open `https://YOUR-SERVICE.onrender.com/chat`. If `API_KEYS` is set, paste the demo
    key into **Settings → API key** in the chat page.
@@ -221,8 +226,11 @@ smallest machine; use a machine with at least 1 GB of RAM or a separate service.
 - Set `RATE_LIMIT_PER_MINUTE` low and `RATE_LIMIT_MAX_WAIT_SECONDS=0`.
 - Set `CORS_ORIGINS` only if a browser app on another origin calls the API. The built-in
   `/chat` page is same-origin and does not need it.
-- `/metrics` and the health probes are public by design. Put `/metrics` behind your
-  proxy or firewall if the deployment is not a throwaway demo.
+- The health probes stay public (load balancers); `/health/ready` shows its per-service
+  details only to callers with a valid `API_KEYS` key. `/metrics` requires an API key when
+  authentication is configured — give your monitoring stack a dedicated `METRICS_TOKEN`
+  instead, and keep both behind your proxy or firewall if the deployment is not a
+  throwaway demo.
 - Review [SECURITY.md](../SECURITY.md) before exposing a production instance.
 
 ## Troubleshooting

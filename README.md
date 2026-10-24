@@ -150,6 +150,7 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `MAX_CONTENT_LENGTH` | no | `5000` | Max characters per message |
 | `MAX_MEMORY_MESSAGES` | no | `20` | Max turns in `memory_context` |
 | `API_KEYS` | no | *(auth disabled)* | Comma-separated client keys accepted in `X-API-Key` |
+| `METRICS_TOKEN` | no | *(off)* | Optional dedicated bearer token for `/metrics` (`Authorization: Bearer ...`), so the monitoring stack needs no API key |
 | `WHATSAPP_*` | no | *(off)* | WhatsApp bot settings, see [docs/WHATSAPP.md](docs/WHATSAPP.md) |
 | `RATE_LIMIT_PER_MINUTE` | no | `60` | Requests per minute per client; `0` disables |
 | `CACHE_TTL_SECONDS` | no | `3600` | Translation cache lifetime; `0` disables |
@@ -204,8 +205,8 @@ only through the proxy.
 |---|---|---|
 | `GET` | `/` | API info and supported languages |
 | `GET` | `/health` | Liveness probe |
-| `GET` | `/health/ready` | Readiness probe (are upstream keys configured?) |
-| `GET` | `/metrics` | Prometheus metrics |
+| `GET` | `/health/ready` | Readiness probe (public status; per-service details require a key) |
+| `GET` | `/metrics` | Prometheus metrics (requires a key or `METRICS_TOKEN` when auth is on) |
 | `GET` | `/v1/languages` | Supported language codes |
 | `POST` | `/v1/translate` | Translate text |
 | `POST` | `/v1/translate/batch` | Translate up to 25 texts in one request |
@@ -233,9 +234,18 @@ When `API_KEYS` is set, every `/v1/*` endpoint except `/v1/languages` requires a
 
 ### Metrics
 
-`GET /metrics` serves Prometheus metrics. Like the health checks, it needs no API key
-and isn't rate limited, so keep it off the public internet (for example, only expose it on
-your internal network or block it at the reverse proxy).
+`GET /metrics` serves Prometheus metrics. When `API_KEYS` is configured, scraping requires a
+valid `X-API-Key` — or, better, a dedicated `METRICS_TOKEN` sent as
+`Authorization: Bearer <token>`, so the monitoring stack holds no key that can call the
+API. Without `API_KEYS` (local development) the endpoint is public. It is never rate
+limited. Scrape example:
+
+```
+http_get:
+  url: http://terngi:8000/metrics
+  headers:
+    Authorization: "Bearer <METRICS_TOKEN>"
+```
 
 | Metric | Labels | Description |
 |---|---|---|

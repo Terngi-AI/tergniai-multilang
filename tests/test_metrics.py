@@ -38,14 +38,37 @@ def test_metrics_endpoint_serves_prometheus_text(client):
     assert 'route="/health"' in response.text
 
 
-def test_metrics_is_public_and_not_rate_limited(client, monkeypatch):
+def test_metrics_is_public_when_auth_is_not_configured(client):
+    response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert "X-RateLimit-Limit" not in response.headers
+
+
+def test_metrics_requires_a_key_when_auth_is_configured(client, monkeypatch):
     monkeypatch.setattr(config, "API_KEYS", ["secret"])
     monkeypatch.setattr(rate_limiter, "limit", 1)
 
+    assert client.get("/metrics").status_code == 401
+
     for _ in range(3):
-        response = client.get("/metrics")
+        response = client.get("/metrics", headers={"X-API-Key": "secret"})
         assert response.status_code == 200
         assert "X-RateLimit-Limit" not in response.headers
+
+
+def test_metrics_accepts_a_dedicated_bearer_token(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["secret"])
+    monkeypatch.setattr(config, "METRICS_TOKEN", "scrape-token")
+
+    ok = client.get("/metrics", headers={"Authorization": "Bearer scrape-token"})
+    assert ok.status_code == 200
+    assert "terngi_http_requests_total" in ok.text
+
+    # A wrong or missing token is rejected, but an API key still works
+    assert client.get("/metrics", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    assert client.get("/metrics").status_code == 401
+    assert client.get("/metrics", headers={"X-API-Key": "secret"}).status_code == 200
 
 
 def test_requests_counted_by_route_template_and_status(client):

@@ -312,6 +312,11 @@ FEEDBACK_MAX_RECORDS = int(os.getenv("FEEDBACK_MAX_RECORDS", "10000"))
 # Leave empty to disable authentication (e.g. for local development).
 API_KEYS = [k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()]
 
+# Optional dedicated bearer token for the Prometheus scrape endpoint. When set,
+# /metrics accepts "Authorization: Bearer <METRICS_TOKEN>" in place of an API key,
+# so the monitoring stack does not need (or leak) a key that can call the API.
+METRICS_TOKEN = os.getenv("METRICS_TOKEN", "")
+
 # Requests per minute allowed per client (API key or IP). 0 disables rate limiting.
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
 

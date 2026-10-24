@@ -24,7 +24,9 @@ logger = logging.getLogger(__name__)
 
 CallNext = Callable[[Request], Awaitable[Response]]
 
-# Paths that never require an API key or count towards the rate limit
+# Paths that never require an API key or count towards the rate limit.
+# /health/ready stays public for load balancers, but its per-service details are only
+# shown to authenticated callers (see routes.base.ready).
 PUBLIC_PATHS = {
     "/chat",
     # Meta calls it; every request is verified by its signature instead of an API key
@@ -32,7 +34,6 @@ PUBLIC_PATHS = {
     "/",
     "/health",
     "/health/ready",
-    "/metrics",
     "/v1/languages",
     "/docs",
     "/redoc",
@@ -238,14 +239,40 @@ async def request_context(request: Request, call_next: CallNext) -> Response:
 async def authenticate(request: Request, call_next: CallNext) -> Response:
     """Require a valid X-API-Key header when API_KEYS is configured"""
     if config.API_KEYS and request.url.path not in PUBLIC_PATHS and request.method != "OPTIONS":
+        # /metrics may also be scraped with a dedicated bearer token, so the monitoring
+        # stack does not need an API key that can call the whole API
+        if request.url.path == "/metrics" and _valid_metrics_token(request):
+            return await call_next(request)
         if not _valid_api_key(request.headers.get("x-api-key")):
             return error_response(401, "Missing or invalid API key")
     return await call_next(request)
 
 
+def _valid_metrics_token(request: Request) -> bool:
+    """Whether the request carries the optional METRICS_TOKEN bearer token"""
+    if not config.METRICS_TOKEN:
+        return False
+    header = request.headers.get("authorization", "")
+    if not header.startswith("Bearer "):
+        return False
+    token = header[len("Bearer ") :].encode("utf-8")
+    return hmac.compare_digest(token, config.METRICS_TOKEN.encode("utf-8"))
+
+
+def is_authenticated(request: Request) -> bool:
+    """Whether the request carried a valid API key (used to reveal readiness details)"""
+    return bool(config.API_KEYS) and _valid_api_key(request.headers.get("x-api-key"))
+
+
 async def rate_limit(request: Request, call_next: CallNext) -> Response:
     """Limit each client to RATE_LIMIT_PER_MINUTE requests"""
-    if rate_limiter.limit <= 0 or request.url.path in PUBLIC_PATHS or request.method == "OPTIONS":
+    # /metrics is exempt too: a Prometheus scrape is not user traffic
+    if (
+        rate_limiter.limit <= 0
+        or request.url.path in PUBLIC_PATHS
+        or request.url.path == "/metrics"
+        or request.method == "OPTIONS"
+    ):
         return await call_next(request)
 
     allowed, remaining, retry_after = await rate_limiter.hit(rate_limit_id(request))

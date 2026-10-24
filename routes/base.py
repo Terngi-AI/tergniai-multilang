@@ -2,11 +2,14 @@
 Base routes for the Terngi Translation API
 """
 
-from fastapi import APIRouter
+from typing import Dict
+
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 import config
+import middleware
 from config import SUPPORTED_LANGUAGES
 from services import llm, store
 from services.translator import translation_available
@@ -37,18 +40,24 @@ async def health():
 
 @router.get("/metrics", include_in_schema=False)
 async def prometheus_metrics() -> Response:
-    """Prometheus scrape endpoint (public, like the health checks)"""
+    """
+    Prometheus scrape endpoint. Requires a valid API key when authentication is
+    configured, or the dedicated METRICS_TOKEN bearer token ("Authorization: Bearer ...").
+    """
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @router.get("/health/ready")
-async def ready():
+async def ready(request: Request):
     """
     Readiness probe for translation, chat and the optional agent path.
 
     Optional dependencies do not fail readiness: the cache fails open and the agent has its
     own endpoint. A degraded status is returned so operators can alert on it without
     draining every replica when Redis has a blip.
+
+    The probe itself is public (load balancers), but the per-service list reveals the
+    configuration, so it is only included for authenticated callers.
     """
     services = {
         "translator": translation_available(),
@@ -58,7 +67,10 @@ async def ready():
     }
     core_ready = services["translator"] or services["llm"] or services["agent"]
     status = "not_ready" if not core_ready else "ready" if all(services.values()) else "degraded"
+    content: Dict[str, object] = {"status": status}
+    if middleware.is_authenticated(request):
+        content["services"] = services
     return JSONResponse(
         status_code=200 if core_ready else 503,
-        content={"status": status, "services": services},
+        content=content,
     )
