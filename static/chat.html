@@ -25,7 +25,7 @@
     display: flex; flex-direction: column;
   }
   header {
-    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    display: flex; align-items: center; gap: 12px; row-gap: 8px; flex-wrap: wrap;
     padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel);
   }
   header h1 { font-size: 17px; margin: 0; font-weight: 650; }
@@ -33,21 +33,24 @@
   .spacer { flex: 1; }
   select, button, input, textarea { font: inherit; color: inherit; }
   select, input {
-    background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px;
+    max-width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 8px;
   }
   button {
-    border: 1px solid var(--border); background: var(--panel); border-radius: 8px;
+    max-width: 100%; border: 1px solid var(--border); background: var(--panel); border-radius: 8px;
     padding: 6px 12px; cursor: pointer;
   }
   button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
   button:disabled { opacity: .55; cursor: default; }
-  label { font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
-  main { flex: 1; overflow-y: auto; padding: 20px 16px; }
-  .thread { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
-  .welcome { text-align: center; color: var(--muted); margin-top: 8vh; }
+  label { font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+  select { min-width: 0; }
+  main { flex: 1; min-width: 0; overflow-y: auto; padding: 20px 16px; }
+  .thread { width: 100%; max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; }
+  .messages { display: flex; flex-direction: column; gap: 14px; }
+  .welcome { text-align: center; color: var(--muted); margin-top: 8vh; margin-bottom: 14px; }
   .welcome h2 { color: var(--text); font-size: 22px; margin-bottom: 4px; }
   .suggestions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 18px; }
-  .suggestions button { font-size: 14px; border-radius: 999px; }
+  .suggestions button { max-width: 100%; overflow-wrap: anywhere; font-size: 14px; border-radius: 999px; }
   .msg { max-width: 85%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
   .msg.user { align-self: flex-end; background: var(--user-bubble); color: var(--user-text); border-bottom-right-radius: 4px; }
   .msg.bot { align-self: flex-start; background: var(--bot-bubble); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
@@ -56,59 +59,215 @@
   .meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
   .typing { align-self: flex-start; color: var(--muted); font-size: 14px; }
   footer { border-top: 1px solid var(--border); background: var(--panel); padding: 12px 16px; }
-  form { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
+  form { max-width: 760px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
   textarea {
-    flex: 1; resize: none; max-height: 180px; min-height: 44px; padding: 10px 12px;
+    flex: 1 1 12rem; min-width: 0; resize: none; max-height: 180px; min-height: 44px; padding: 10px 12px;
     border: 1px solid var(--border); border-radius: 12px; background: var(--bg);
   }
-  textarea:focus, select:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  :where(button, select, input, textarea, summary, a[href], [tabindex]):focus-visible {
+    outline: 3px solid var(--accent); outline-offset: 2px;
+  }
+  ::placeholder { color: var(--muted); opacity: 1; }
   .hint { max-width: 760px; margin: 6px auto 0; font-size: 12px; color: var(--muted); }
   details { font-size: 14px; }
   details[open] { width: 100%; }
-  @media (max-width: 600px) { .msg { max-width: 92%; } header h1 { width: 100%; } }
+  details label { align-items: stretch; flex-wrap: wrap; }
+  #api-key { flex: 1 1 100%; min-width: 0; }
+  @media (max-width: 600px) {
+    .msg { max-width: 92%; }
+    header { align-items: flex-start; }
+    header h1 { width: 100%; }
+    .spacer { display: none; }
+    details[open] { width: 100%; }
+  }
 </style>
 </head>
 <body>
 <header>
   <h1>Terngi <span>AI</span></h1>
-  <label>Reply in
+
+  <label><span data-i18n="uiLangLabel">Interface:</span>
+    <select id="ui-language" aria-label="Interface language">
+      <option value="en">English</option>
+      <option value="yo">Yorùbá</option>
+      <option value="ha">Hausa</option>
+      <option value="ig">Igbo</option>
+      <option value="pcm">Naijá (Pidgin)</option>
+      <option value="sw">Kiswahili</option>
+    </select>
+  </label>
+
+  <label><span data-i18n="replyInLabel">Reply in</span>
     <select id="reply-language" aria-label="Reply language">
-      <option value="">Same language as me</option>
+      <option value="" data-i18n="sameLanguageOption">Same language as me</option>
     </select>
   </label>
   <div class="spacer"></div>
-  <button id="new-chat" type="button">New chat</button>
+  <button id="new-chat" type="button" data-i18n="newChat">New chat</button>
   <details>
-    <summary>Settings</summary>
-    <label>API key <input id="api-key" type="password" autocomplete="off" placeholder="Only if the server requires one"></label>
+    <summary data-i18n="settings">Settings</summary>
+    <label><span data-i18n="apiKeyLabel">API key</span> <input id="api-key" type="password" autocomplete="off" aria-label="API key" data-i18n-attr="placeholder:apiKeyPlaceholder" placeholder="Only if the server requires one"></label>
   </details>
 </header>
 
-<main id="scroll">
+<main id="scroll" tabindex="0" aria-label="Chat transcript">
   <div class="thread" id="thread">
     <div class="welcome" id="welcome">
       <h2>Ẹ káàbọ̀ · Sannu · Nnọọ · Karibu · Sawubona</h2>
-      <p>Chat with Terngi AI about anything, in any of 14 languages.</p>
+      <p data-i18n="welcomeSub">Chat with Terngi AI about anything, in your own language.</p>
       <div class="suggestions" id="suggestions"></div>
     </div>
+    <div class="messages" id="messages" role="log" aria-live="polite" aria-relevant="additions" aria-label="Messages"></div>
   </div>
 </main>
 
 <footer>
-  <form id="composer">
-    <textarea id="input" rows="1" placeholder="Message Terngi AI…" aria-label="Message"></textarea>
-    <button class="primary" id="send" type="submit">Send</button>
+  <form id="composer" aria-label="Message composer">
+    <textarea id="input" rows="1" data-i18n-attr="placeholder:inputPlaceholder,aria-label:inputAriaLabel" placeholder="Message Terngi AI…" aria-label="Message" aria-describedby="input-hint"></textarea>
+    <button class="primary" id="send" type="submit" data-i18n="send">Send</button>
   </form>
-  <div class="hint">Enter to send · Shift+Enter for a new line. Conversations are kept on the server for 24 hours.</div>
+  <div class="hint" id="input-hint" data-i18n="hint">Enter to send · Shift+Enter for a new line. Conversations are kept on the server for 24 hours.</div>
 </footer>
 
 <script>
 (() => {
-  const thread = document.getElementById("thread");
+  const TRANSLATIONS = {
+    en: {
+      uiLangLabel: "Interface:",
+      replyInLabel: "Reply in",
+      sameLanguageOption: "Same language as me",
+      newChat: "New chat",
+      settings: "Settings",
+      apiKeyLabel: "API key",
+      apiKeyPlaceholder: "Only if the server requires one",
+      welcomeSub: "Chat with Terngi AI about anything, in your own language.",
+      inputPlaceholder: "Message Terngi AI…",
+      inputAriaLabel: "Message",
+      send: "Send",
+      hint: "Enter to send · Shift+Enter for a new line. Conversations are kept on the server for 24 hours.",
+      typing: "Terngi AI is thinking…",
+      usingTool: "Terngi AI is using",
+      newChatGreeting: "New conversation started. What would you like to talk about?",
+      expiredError: "That conversation expired. Your next message starts a new one.",
+      genericError: "Something went wrong.",
+      networkError: "Couldn't reach the server. Check your connection and try again.",
+      usedTools: "used"
+    },
+    yo: {
+      uiLangLabel: "Èdè UI:",
+      replyInLabel: "Dáhùn ní",
+      sameLanguageOption: "Èdè kan náà pẹ̀lú mi",
+      newChat: "Ọ̀rọ̀ tuntun",
+      settings: "Ètò",
+      apiKeyLabel: "Kọ́kọ́rọ́ API",
+      apiKeyPlaceholder: "Kìkì tí olupin bá béèrè fún un",
+      welcomeSub: "Bá Terngi AI sọ̀rọ̀ nípa ohunkóhun, ní èdè rẹ.",
+      inputPlaceholder: "Firanṣẹ́ sí Terngi AI…",
+      inputAriaLabel: "Ifiranṣẹ́",
+      send: "Firanṣẹ́",
+      hint: "Enter láti firanṣẹ́ · Shift+Enter fún ìlà tuntun. Ìjíròrò yóò wà lórí olupin fún wákàtí 24.",
+      typing: "Terngi AI ń rò ó…",
+      usingTool: "Terngi AI ń lo",
+      newChatGreeting: "Ìjíròrò tuntun ti bẹ̀rẹ̀. Kí ni o fẹ́ ká sọ̀rọ̀ nípa rẹ̀?",
+      expiredError: "Ìjíròrò yẹn ti parí. Ìfiranṣẹ́ rẹ tí ó kàn yóò bẹ̀rẹ̀ tuntun.",
+      genericError: "Nǹkan kan tọsẹ.",
+      networkError: "Kò lè dé ọ̀dọ̀ olupin. Yẹ asopọ rẹ wò kí o tún gbìyànjú.",
+      usedTools: "lo"
+    },
+    ha: {
+      uiLangLabel: "Harshen shafi:",
+      replyInLabel: "Amsa a",
+      sameLanguageOption: "Harshe ɗaya da ni",
+      newChat: "Sabuwar hira",
+      settings: "Saituna",
+      apiKeyLabel: "Mabuɗin API",
+      apiKeyPlaceholder: "Idan har uwar garken na buƙata kawai",
+      welcomeSub: "Yi hira da Terngi AI game da komai, cikin yarenka.",
+      inputPlaceholder: "Aika saƙo zuwa Terngi AI…",
+      inputAriaLabel: "Saƙo",
+      send: "Aika",
+      hint: "Danna Enter don aikawa · Shift+Enter don sabon layi. Ana adana hirarraki na tsawon awanni 24.",
+      typing: "Terngi AI yana tunani…",
+      usingTool: "Terngi AI yana amfani da",
+      newChatGreeting: "An fara sabuwar hira. Me kuke so mu tattauna akai?",
+      expiredError: "Waccan hirar ta ƙare. Saƙonku na gaba zai fara sabuwa.",
+      genericError: "Wani abu ya sami matsala.",
+      networkError: "An kasa isa ga uwar garken. Duba hanyar sadarwarka sannan ka sake gwadawa.",
+      usedTools: "anyi amfani da"
+    },
+    ig: {
+      uiLangLabel: "Asụsụ Ihuenyo:",
+      replyInLabel: "Zaa na",
+      sameLanguageOption: "Otu asụsụ ahụ m ji dee",
+      newChat: "Mkparịta ụka ọhụrụ",
+      settings: "Ntọala",
+      apiKeyLabel: "Igodo API",
+      apiKeyPlaceholder: "Naanị ma sava chọrọ ya",
+      welcomeSub: "Kparịta ụka na Terngi AI gbasara ihe ọ bụla, n'asụsụ gị.",
+      inputPlaceholder: "Ziga ozi na Terngi AI…",
+      inputAriaLabel: "Ozi",
+      send: "Ziga",
+      hint: "Enter iji ziga · Shift+Enter maka ahịrị ọhụrụ. A na-edebe mkparịta ụka na sava ruo awa 24.",
+      typing: "Terngi AI na-eche echiche…",
+      usingTool: "Terngi AI na-eji",
+      newChatGreeting: "Amalitere mkparịta ụka ọhụrụ. Kedu ihe ị ga-achọ ka anyị kpaa maka ya?",
+      expiredError: "Mkparịta ụka ahụ agwụla. Ozi ọzọ ị ga-eziga ga-amalite nke ọhụrụ.",
+      genericError: "Ihe mebiri.",
+      networkError: "Enweghị ike iru sava ahụ. Lelee njikọ gị ma nwaa ọzọ.",
+      usedTools: "jiri"
+    },
+    pcm: {
+      uiLangLabel: "Language:",
+      replyInLabel: "Reply with",
+      sameLanguageOption: "The same language wey I use",
+      newChat: "New chat",
+      settings: "Settings",
+      apiKeyLabel: "API key",
+      apiKeyPlaceholder: "Only if server need am",
+      welcomeSub: "Follow Terngi AI yarn about anything, for your own language.",
+      inputPlaceholder: "Message Terngi AI…",
+      inputAriaLabel: "Message",
+      send: "Send",
+      hint: "Enter to send · Shift+Enter for new line. Server dey keep chat for 24 hours.",
+      typing: "Terngi AI dey reason…",
+      usingTool: "Terngi AI dey use",
+      newChatGreeting: "New gist don start. Wetin you wan talk about?",
+      expiredError: "Dat gist don expire. Your next message go start new one.",
+      genericError: "Wahala dey.",
+      networkError: "Network no reach server. Check your connection try again.",
+      usedTools: "use"
+    },
+    sw: {
+      uiLangLabel: "Lugha:",
+      replyInLabel: "Jibu kwa",
+      sameLanguageOption: "Lugha sawa na yangu",
+      newChat: "Gumzo jipya",
+      settings: "Mipangilio",
+      apiKeyLabel: "Ufunguo wa API",
+      apiKeyPlaceholder: "Ikiwa tu seva inaihitaji",
+      welcomeSub: "Zungumza na Terngi AI kuhusu chochote, katika lugha yako.",
+      inputPlaceholder: "Tuma ujumbe kwa Terngi AI…",
+      inputAriaLabel: "Ujumbe",
+      send: "Tuma",
+      hint: "Enter kutuma · Shift+Enter kwa mstari mpya. Mazungumzo huwekwa kwenye seva kwa saa 24.",
+      typing: "Terngi AI anafikiria…",
+      usingTool: "Terngi AI anatumia",
+      newChatGreeting: "Mazungumzo mapya yameanza. Ungependa kuzungumza kuhusu nini?",
+      expiredError: "Mazungumzo hayo yamekwisha muda wake. Ujumbe wako unaofuata utaanza mapya.",
+      genericError: "Hitilafu imetokea.",
+      networkError: "Haikuweza kuunganishwa na seva. Angalia mtandao wako kisha ujaribu tena.",
+      usedTools: "imetumia"
+    }
+  };
+
+  const SUPPORTED_LANGS = Object.keys(TRANSLATIONS);
+
+  const messages = document.getElementById("messages");
   const scroller = document.getElementById("scroll");
   const input = document.getElementById("input");
   const send = document.getElementById("send");
   const replySelect = document.getElementById("reply-language");
+  const uiLanguageSelect = document.getElementById("ui-language");
   const apiKeyInput = document.getElementById("api-key");
   let conversationId = null;
   let busy = false;
@@ -117,6 +276,43 @@
     get(key) { try { return localStorage.getItem(key); } catch { return null; } },
     set(key, value) { try { localStorage.setItem(key, value); } catch {} },
   };
+
+  function resolveLanguage() {
+    const saved = store.get("terngi.uiLanguage");
+    if (saved && SUPPORTED_LANGS.includes(saved)) return saved;
+    const nav = (navigator.language || "").split("-")[0].toLowerCase();
+    return SUPPORTED_LANGS.includes(nav) ? nav : "en";
+  }
+
+  let currentLang = resolveLanguage();
+
+  function applyLanguage(lang) {
+    if (!TRANSLATIONS[lang]) lang = "en";
+    currentLang = lang;
+    store.set("terngi.uiLanguage", lang);
+    document.documentElement.lang = lang;
+    uiLanguageSelect.value = lang;
+
+    const dict = TRANSLATIONS[lang];
+
+    document.querySelectorAll("[data-i18n]").forEach(el => {
+      const key = el.getAttribute("data-i18n");
+      if (dict[key]) el.textContent = dict[key];
+    });
+
+    document.querySelectorAll("[data-i18n-attr]").forEach(el => {
+      const mappings = el.getAttribute("data-i18n-attr").split(",");
+      mappings.forEach(mapping => {
+        const [attr, key] = mapping.split(":");
+        if (dict[key]) el.setAttribute(attr, dict[key]);
+      });
+    });
+  }
+
+  uiLanguageSelect.value = currentLang;
+  applyLanguage(currentLang);
+  uiLanguageSelect.addEventListener("change", (e) => applyLanguage(e.target.value));
+
   apiKeyInput.value = store.get("terngi.apiKey") || "";
   apiKeyInput.addEventListener("change", () => store.set("terngi.apiKey", apiKeyInput.value.trim()));
 
@@ -146,8 +342,8 @@
   }).catch(() => {});
   replySelect.addEventListener("change", () => store.set("terngi.replyLanguage", replySelect.value));
 
-  // Render **bold** and `code` safely (text only, no HTML injection)
   function render(el, text) {
+    el.replaceChildren();
     const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
     for (const part of parts) {
       if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
@@ -171,7 +367,7 @@
       m.textContent = meta;
       el.appendChild(m);
     }
-    thread.appendChild(el);
+    messages.appendChild(el);
     scroller.scrollTop = scroller.scrollHeight;
     return el;
   }
@@ -191,8 +387,8 @@
       fetch(`/v1/chat/${conversationId}`, { method: "DELETE", headers: headers() }).catch(() => {});
     }
     conversationId = null;
-    thread.replaceChildren();
-    addMessage("bot", "New conversation started. What would you like to talk about?");
+    messages.replaceChildren();
+    addMessage("bot", TRANSLATIONS[currentLang].newChatGreeting);
     input.focus();
   });
 
@@ -203,25 +399,31 @@
     return h;
   }
 
-  // Minimal Server-Sent Events reader for fetch() responses
   async function readEvents(stream, onEvent) {
-    const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
     let buffer = "";
-    for (;;) {
+    let currentEvent = "message";
+
+    while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      buffer += value;
-      let end;
-      while ((end = buffer.indexOf("\n\n")) !== -1) {
-        const chunk = buffer.slice(0, end);
-        buffer = buffer.slice(end + 2);
-        let event = "message";
-        let data = "";
-        for (const line of chunk.split("\n")) {
-          if (line.startsWith("event:")) event = line.slice(6).trim();
-          else if (line.startsWith("data:")) data += line.slice(5).trim();
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (line.startsWith("event: ")) {
+          currentEvent = line.slice(7).trim();
+        } else if (line.startsWith("data: ")) {
+          const payload = line.slice(6).trim();
+          if (payload) {
+            try {
+              onEvent(currentEvent, JSON.parse(payload));
+            } catch {}
+          }
+          currentEvent = "message";
         }
-        try { onEvent(event, JSON.parse(data)); } catch {}
       }
     }
   }
@@ -232,41 +434,48 @@
     busy = true; send.disabled = true;
     input.value = ""; autosize();
     addMessage("user", text);
+
     const typing = document.createElement("div");
     typing.className = "typing";
-    typing.textContent = "Terngi AI is thinking…";
-    thread.appendChild(typing);
+    typing.textContent = TRANSLATIONS[currentLang].typing;
+    messages.appendChild(typing);
     scroller.scrollTop = scroller.scrollHeight;
 
     const body = { message: text };
     if (conversationId) body.conversation_id = conversationId;
     if (replySelect.value) body.reply_language = replySelect.value;
 
+    let bubble = null;
+    let streamed = "";
+    const usedTools = new Set();
+    const ensureBubble = () => {
+      if (!bubble) {
+        bubble = addMessage("bot", "");
+        messages.appendChild(typing);
+      }
+      return bubble;
+    };
+
     try {
-      const res = await fetch("/v1/chat/stream", { method: "POST", headers: headers(), body: JSON.stringify(body) });
-      if (!res.ok || !res.body) {
-        const data = await res.json().catch(() => ({}));
+      const res = await fetch("/v1/chat/stream", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify(body),
+      });
+
+      if (res.status === 404 && conversationId) {
         typing.remove();
-        if (res.status === 404 && conversationId) {
-          conversationId = null;
-          addMessage("error", "That conversation expired. Your next message starts a new one.");
-        } else {
-          addMessage("error", data.message || `Something went wrong (${res.status}).`);
-        }
+        conversationId = null;
+        addMessage("error", TRANSLATIONS[currentLang].expiredError);
         return;
       }
 
-      // Show the reply as it streams in; "done" carries the final text
-      let bubble = null;
-      let streamed = "";
-      const usedTools = new Set();
-      const ensureBubble = () => {
-        if (!bubble) {
-          bubble = addMessage("bot", "");
-          thread.appendChild(typing); // keep the status line below the reply
-        }
-        return bubble;
-      };
+      if (!res.ok) {
+        typing.remove();
+        const data = await res.json().catch(() => ({}));
+        addMessage("error", data.message || `${TRANSLATIONS[currentLang].genericError} (${res.status}).`);
+        return;
+      }
 
       await readEvents(res.body, (event, data) => {
         if (event === "start") {
@@ -280,28 +489,23 @@
           if (bubble) bubble.textContent = "";
         } else if (event === "tool") {
           usedTools.add(data.tool);
-          typing.textContent = `Terngi AI is using ${data.tool.replace(/_/g, " ")}…`;
+          typing.textContent = `${TRANSLATIONS[currentLang].usingTool} ${data.tool.replace(/_/g, " ")}…`;
         } else if (event === "done") {
           conversationId = data.conversation_id;
-          const el = ensureBubble();
-          el.replaceChildren();
-          render(el, data.reply);
-          if (usedTools.size) {
-            const m = document.createElement("div");
-            m.className = "meta";
-            m.textContent = `used: ${[...usedTools].join(", ")}`;
-            el.appendChild(m);
-          }
+          if (bubble) { bubble.remove(); bubble = null; }
+          typing.remove();
+          const meta = usedTools.size ? `${TRANSLATIONS[currentLang].usedTools}: ${[...usedTools].join(", ")}` : null;
+          addMessage("bot", data.reply, meta);
         } else if (event === "error") {
           bubble?.remove();
           bubble = null;
-          addMessage("error", data.message || "Something went wrong.");
+          typing.remove();
+          addMessage("error", data.message || TRANSLATIONS[currentLang].genericError);
         }
       });
-      typing.remove();
     } catch (err) {
-      typing.remove();
-      addMessage("error", "Couldn't reach the server. Check your connection and try again.");
+      if (typing.parentNode) typing.remove();
+      addMessage("error", TRANSLATIONS[currentLang].networkError);
     } finally {
       busy = false; send.disabled = false; input.focus();
     }
