@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import config
 from services import llm
+from services.text import normalize_text
 
 
 def _language_name(code: str) -> str:
@@ -15,7 +16,7 @@ def _language_name(code: str) -> str:
 
 
 def _non_empty(text: str) -> str:
-    text = text.strip()
+    text = normalize_text(text).strip()
     if not text:
         raise ValueError("empty output")
     return text
@@ -32,13 +33,19 @@ async def get_response(content: str, memory_context: Optional[List[Dict[str, Any
     Returns:
         Reply in English
     """
+    content = normalize_text(content)
     messages: List[Dict[str, str]] = [{"role": "system", "content": config.SYSTEM_PROMPT}]
 
     # Add memory context if provided (only user/assistant turns are allowed)
     if memory_context:
         for message in memory_context:
             if message.get("role") in ("user", "assistant") and "content" in message:
-                messages.append({"role": message["role"], "content": message["content"]})
+                messages.append(
+                    {
+                        "role": message["role"],
+                        "content": normalize_text(message["content"]),
+                    }
+                )
 
     messages.append({"role": "user", "content": content})
 
@@ -62,6 +69,7 @@ async def translate_batch(
     Returns:
         Translated texts, in the same order as the input
     """
+    texts = [normalize_text(text) for text in texts]
     source, target = _language_name(from_language), _language_name(to_language)
 
     # Small models such as MORENA are more reliable translating one plain-text item at a time
@@ -117,7 +125,7 @@ async def translate_batch(
             or not all(isinstance(t, str) for t in translations)
         ):
             raise ValueError("translations missing or wrong length")
-        return translations
+        return [normalize_text(translation) for translation in translations]
 
     return await llm.complete(
         [provider],
@@ -138,6 +146,7 @@ async def detect_language(content: str, provider: str) -> Tuple[str, float]:
     Returns:
         Tuple of (ISO 639-1 language code, confidence score between 0 and 1)
     """
+    content = normalize_text(content)
     known = ", ".join(f"{code} = {name}" for code, name in config.SUPPORTED_LANGUAGES.items())
     system = (
         "Identify the language of the user's text. Use one of these codes when it matches "

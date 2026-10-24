@@ -101,6 +101,21 @@ def test_history_is_capped(client, monkeypatch):
     assert [m["content"] for m in messages] == ["two", "ok", "three", "ok"]
 
 
+@respx.mock
+def test_provider_history_is_bounded_by_characters(client, monkeypatch):
+    monkeypatch.setattr(config, "CONVERSATION_MAX_CHARS", 12)
+    route = respx.post(CHAT_URL).mock(return_value=answer("ok"))
+
+    conversation_id = say(client, "one").json()["conversation_id"]
+    for text in ["two", "three", "four"]:
+        say(client, text, conversation_id)
+
+    sent = json.loads(route.calls[-1].request.content)["messages"]
+    history = sent[1:-1]
+    assert [message["content"] for message in history] == ["two", "ok", "three", "ok"]
+    assert sum(len(message["content"]) for message in history) <= 12
+
+
 def test_failed_reply_is_not_stored(client, monkeypatch):
     monkeypatch.setattr(config, "AGENT_PROVIDERS", [])
 

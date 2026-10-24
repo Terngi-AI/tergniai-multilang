@@ -4,7 +4,7 @@
 [![Security](https://github.com/Terngi-AI/tergniai-multilang/actions/workflows/security.yml/badge.svg)](https://github.com/Terngi-AI/tergniai-multilang/actions/workflows/security.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Terngi-AI/tergniai-multilang/badge)](https://scorecard.dev/viewer/?uri=github.com/Terngi-AI/tergniai-multilang)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Python](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue)
+![Python](https://img.shields.io/badge/python-3.11%E2%80%933.13-blue)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Good first issues](https://img.shields.io/github/issues/Terngi-AI/tergniai-multilang/good%20first%20issue?label=good%20first%20issues&color=7057ff)](https://github.com/Terngi-AI/tergniai-multilang/labels/good%20first%20issue)
 [![GitHub stars](https://img.shields.io/github/stars/Terngi-AI/tergniai-multilang?style=social)](https://github.com/Terngi-AI/tergniai-multilang/stargazers)
@@ -58,7 +58,7 @@ built in the open so native speakers and developers can improve it together.
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - At least one provider: a [Groq API key](https://console.groq.com/keys) (free tier),
   [MORENA running locally](docs/MORENA.md) (free), an Azure Translator key, or any
   OpenAI-compatible API
@@ -92,7 +92,13 @@ docker compose up
 ```
 
 Starts the API with Redis, so the cache, rate limits and chat conversations are shared and
-survive restarts.
+survive restarts. The Redis service also has a 512 MB `volatile-lru` limit as a safety net;
+conversation storage independently enforces `CONVERSATION_MAX_ITEMS`.
+
+### Deploy a public demo
+
+See [docs/DEPLOY.md](docs/DEPLOY.md) for current free/cheap hosting options (Render,
+Hugging Face Spaces, Fly.io), secret/rate-limit settings, and free-tier caveats.
 
 ### Run with MORENA (free, no API keys needed)
 
@@ -122,7 +128,9 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `AGENT_PROVIDERS` | no | OpenAI-compatible chat providers | Providers that run the agent (must support tool calling) |
 | `AGENT_MAX_STEPS` | no | `6` | Max model turns per agent request |
 | `CONVERSATION_TTL_SECONDS` | no | `86400` | How long chats are remembered after the last message |
+| `CONVERSATION_MAX_ITEMS` | no | `10000` | Maximum conversations kept; the least recently written are evicted first |
 | `CONVERSATION_MAX_MESSAGES` | no | `40` | Messages kept per conversation |
+| `CONVERSATION_MAX_CHARS` | no | `20000` | Characters of history kept per conversation; the oldest turns are dropped first |
 | `REDIS_URL` | no | *(in-memory)* | Redis for shared cache, rate limits and conversations, e.g. `redis://localhost:6379/0` |
 | `REDIS_PREFIX` | no | `terngi:` | Prefix for every Redis key |
 | `REDIS_TIMEOUT` | no | `2` | Redis connect/read timeout in seconds |
@@ -146,6 +154,7 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `MAX_BATCH_CHARACTERS` | no | `50000` | Max total characters per batch |
 | `MAX_REQUEST_BYTES` | no | `1048576` | Largest request body accepted; bigger requests get `413` |
 | `CORS_ORIGINS` | no | *(disabled)* | Comma-separated allowed origins |
+| `FORWARDED_ALLOW_IPS` | no | `127.0.0.1,::1` | Proxy IPs/CIDRs trusted to set `X-Forwarded-For` |
 | `LOG_LEVEL` | no | `INFO` | Python log level |
 
 \* You need at least one provider. Built-in provider names are `groq`, `openrouter`,
@@ -168,6 +177,15 @@ OPENROUTER_API_KEYS=sk-or-...
 OPENROUTER_MODELS=meta-llama/llama-3.3-70b-instruct
 TRANSLATION_PROVIDERS=morena,groq,openrouter
 ```
+
+### Running behind a reverse proxy
+
+Set `FORWARDED_ALLOW_IPS` to the proxy's IPs or CIDRs (comma-separated), for example the
+ALB/Nginx address or the Docker network subnet. Uvicorn trusts `X-Forwarded-For` only from
+those peers; requests from anywhere else keep their direct peer address, so a client cannot
+spoof its identity. Without this setting, every anonymous client behind the proxy shares one
+rate-limit bucket and one conversation owner. Do not use `*` unless the API port is reachable
+only through the proxy.
 
 ## API
 
@@ -323,7 +341,7 @@ mypy .
 pre-commit install    # run checks automatically on every commit
 ```
 
-CI runs lint, type checks, tests on Python 3.10–3.13 and a Docker smoke test on every pull
+CI runs lint, type checks, tests on Python 3.11–3.13 and a Docker smoke test on every pull
 request. A separate security workflow scans for malware, secrets, insecure code, vulnerable
 dependencies and container issues, and runs simulated attacks against the API, on every PR and
 daily. See [SECURITY.md](SECURITY.md#automated-security-scanning).

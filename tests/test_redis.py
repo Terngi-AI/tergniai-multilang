@@ -3,6 +3,7 @@ Tests for the Redis backend (REDIS_URL): shared translation cache, rate limits a
 conversations, using an in-process fake Redis
 """
 
+import asyncio
 import json
 
 import fakeredis
@@ -220,6 +221,52 @@ def test_readiness_degrades_when_redis_is_down(client, redis_down):
     assert response.json()["status"] == "degraded"
     assert response.json()["services"]["storage"] is False
     assert response.json()["services"]["translator"] is True
+
+
+@pytest.mark.asyncio
+async def test_redis_store_enforces_the_conversation_key_cap(redis):
+    capped = store.RedisStore(
+        "conversation",
+        config.CONVERSATION_TTL_SECONDS,
+        max_items=2,
+        enforce_max_items=True,
+    )
+
+    await capped.set("a", {"owner": "x", "messages": []})
+    await capped.set("b", {"owner": "x", "messages": []})
+    await capped.set("c", {"owner": "x", "messages": []})
+
+    fake = store.get_redis()
+    index_key = "terngi:conversation:__index"
+    assert await fake.zcard(index_key) == 2
+    assert await fake.exists("terngi:conversation:a") == 0
+    assert await fake.exists("terngi:conversation:b") == 1
+    assert await fake.exists("terngi:conversation:c") == 1
+
+    await capped.delete("c")
+    assert await fake.zcard(index_key) == 1
+    assert await fake.exists("terngi:conversation:c") == 0
+
+
+@pytest.mark.asyncio
+async def test_redis_store_cap_keeps_recently_updated_conversations(redis):
+    capped = store.RedisStore(
+        "conversation",
+        config.CONVERSATION_TTL_SECONDS,
+        max_items=2,
+        enforce_max_items=True,
+    )
+
+    await capped.set("a", {"owner": "x", "messages": []})
+    await capped.set("b", {"owner": "x", "messages": []})
+    await asyncio.sleep(0.01)
+    await capped.update("a", lambda entry: entry)
+    await capped.set("c", {"owner": "x", "messages": []})
+
+    fake = store.get_redis()
+    assert await fake.exists("terngi:conversation:a") == 1
+    assert await fake.exists("terngi:conversation:b") == 0
+    assert await fake.exists("terngi:conversation:c") == 1
 
 
 def test_in_memory_storage_without_redis_url(monkeypatch):

@@ -1,9 +1,13 @@
 """
-Tests for security headers and the request body size limit
+Tests for security headers, request body limits and trusted proxy headers
 """
+
+import httpx
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 import config
 import middleware
+from services import conversations
 
 
 def test_security_headers_on_api_responses(client):
@@ -90,3 +94,48 @@ def test_normal_body_is_accepted(client):
     )
 
     assert response.status_code == 200
+
+
+async def _chat_owners(monkeypatch, peer: str, forwarded_for: str):
+    """Run /v1/chat through uvicorn's proxy middleware and return the owners it used"""
+    from main import app
+
+    owners = []
+
+    async def fake_create(owner):
+        owners.append(owner)
+        return "test-conversation"
+
+    async def fake_append(*args, **kwargs):
+        return None
+
+    async def fake_run_agent(*args, **kwargs):
+        return {"answer": "ok", "language": "en", "reply_language": "en", "steps": []}
+
+    monkeypatch.setattr(conversations, "create", fake_create)
+    monkeypatch.setattr(conversations, "append", fake_append)
+    monkeypatch.setattr("routes.chat.run_agent", fake_run_agent)
+
+    proxy = ProxyHeadersMiddleware(app, trusted_hosts="127.0.0.1")
+    transport = httpx.ASGITransport(app=proxy, client=(peer, 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        response = await http.post(
+            "/v1/chat",
+            json={"message": "Hi", "language": "en"},
+            headers={"X-Forwarded-For": forwarded_for},
+        )
+
+    assert response.status_code == 200
+    return owners
+
+
+async def test_trusted_proxy_resolves_the_forwarded_client(monkeypatch):
+    owners = await _chat_owners(monkeypatch, "127.0.0.1", "203.0.113.9")
+
+    assert owners == ["ip:203.0.113.9"]
+
+
+async def test_untrusted_peer_cannot_spoof_forwarded_for(monkeypatch):
+    owners = await _chat_owners(monkeypatch, "198.51.100.7", "203.0.113.9")
+
+    assert owners == ["ip:198.51.100.7"]

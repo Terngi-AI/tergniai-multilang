@@ -120,12 +120,23 @@ class MemoryStore(KeyValueStore):
 class RedisStore(KeyValueStore):
     """Redis store; every key gets REDIS_PREFIX + namespace and expires after `ttl` seconds"""
 
-    def __init__(self, namespace: str, ttl: float) -> None:
+    def __init__(
+        self,
+        namespace: str,
+        ttl: float,
+        max_items: int = 0,
+        enforce_max_items: bool = False,
+    ) -> None:
         self.namespace = namespace
         self.ttl = ttl
+        self.max_items = max(0, max_items)
+        self.enforce_max_items = enforce_max_items and self.max_items > 0
 
     def _key(self, key: str) -> str:
         return f"{config.REDIS_PREFIX}{self.namespace}:{key}"
+
+    def _index_key(self) -> str:
+        return f"{config.REDIS_PREFIX}{self.namespace}:__index"
 
     async def get(self, key: str) -> Optional[Any]:
         if self.ttl <= 0:
@@ -140,9 +151,40 @@ class RedisStore(KeyValueStore):
         if self.ttl <= 0:
             return
         try:
-            await get_redis().set(
-                self._key(key), json.dumps(value, ensure_ascii=False), ex=max(1, int(self.ttl))
-            )
+            redis = get_redis()
+            data_key = self._key(key)
+            payload = json.dumps(value, ensure_ascii=False)
+            if not self.enforce_max_items:
+                await redis.set(data_key, payload, ex=max(1, int(self.ttl)))
+                return
+
+            # Keep an index of keys so Redis honours CONVERSATION_MAX_ITEMS.
+            index_key = self._index_key()
+            now = time.time()
+            for _ in range(5):
+                try:
+                    async with redis.pipeline(transaction=True) as pipe:
+                        await pipe.watch(index_key)
+                        pipe.multi()
+                        pipe.set(data_key, payload, ex=max(1, int(self.ttl)))
+                        pipe.zadd(index_key, {data_key: now})
+                        pipe.zremrangebyscore(index_key, 0, now - self.ttl)
+                        pipe.zcard(index_key)
+                        result = await pipe.execute()
+                    count = int(result[-1])
+                    if count > self.max_items:
+                        evicted = await redis.zrange(index_key, 0, count - self.max_items - 1)
+                        if evicted:
+                            await redis.delete(*evicted)
+                            await redis.zrem(index_key, *evicted)
+                    return
+                except Exception as e:
+                    if type(e).__name__ == "WatchError":
+                        continue
+                    raise
+            raise StoreError("concurrent set conflict")
+        except StoreError:
+            raise
         except Exception as e:
             raise StoreError(str(e)) from e
 
@@ -170,6 +212,11 @@ class RedisStore(KeyValueStore):
                             json.dumps(updated, ensure_ascii=False),
                             ex=max(1, int(self.ttl)),
                         )
+                        if self.enforce_max_items:
+                            index_key = self._index_key()
+                            now = time.time()
+                            pipe.zadd(index_key, {redis_key: now})
+                            pipe.zremrangebyscore(index_key, 0, now - self.ttl)
                         await pipe.execute()
                         return updated
                 except Exception as e:
@@ -184,7 +231,11 @@ class RedisStore(KeyValueStore):
 
     async def delete(self, key: str) -> None:
         try:
-            await get_redis().delete(self._key(key))
+            redis = get_redis()
+            data_key = self._key(key)
+            await redis.delete(data_key)
+            if self.enforce_max_items:
+                await redis.zrem(self._index_key(), data_key)
         except Exception as e:
             raise StoreError(str(e)) from e
 
@@ -192,9 +243,22 @@ class RedisStore(KeyValueStore):
         """Nothing to clear locally; data lives in Redis"""
 
 
-def make_store(namespace: str, max_items: int, ttl: float) -> KeyValueStore:
+def make_store(
+    namespace: str,
+    max_items: int,
+    ttl: float,
+    *,
+    enforce_max_items: bool = False,
+) -> KeyValueStore:
     """A Redis-backed store when REDIS_URL is set, otherwise an in-memory one"""
-    return RedisStore(namespace, ttl) if using_redis() else MemoryStore(max_items, ttl)
+    if using_redis():
+        return RedisStore(
+            namespace,
+            ttl,
+            max_items=max_items,
+            enforce_max_items=enforce_max_items,
+        )
+    return MemoryStore(max_items, ttl)
 
 
 # --- Rate limiter --------------------------------------------------------------------------

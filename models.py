@@ -4,11 +4,20 @@ Pydantic models for the Terngi Translation API
 
 from typing import Annotated, Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field
 
 from config import MAX_BATCH_SIZE, MAX_CONTENT_LENGTH, MAX_MEMORY_MESSAGES
+from services.text import normalize_value
 
-Text = Annotated[str, Field(min_length=1, max_length=MAX_CONTENT_LENGTH)]
+# User-provided text is normalised before length validation, so an NFD spelling cannot
+# reject a value whose composed form fits. Responses use the same form.
+NfcText = Annotated[str, BeforeValidator(normalize_value)]
+StoredText = Annotated[str, BeforeValidator(normalize_value), Field(max_length=MAX_CONTENT_LENGTH)]
+Text = Annotated[
+    str,
+    BeforeValidator(normalize_value),
+    Field(min_length=1, max_length=MAX_CONTENT_LENGTH),
+]
 
 
 class TranslationRequest(BaseModel):
@@ -22,17 +31,17 @@ class TranslationRequest(BaseModel):
 class TranslationResponse(BaseModel):
     """Response model for translation endpoints"""
 
-    translated_text: str
+    translated_text: NfcText
     from_language: str
     to_language: str
-    original_text: str
+    original_text: NfcText
 
 
 class MemoryMessage(BaseModel):
     """A previous turn in the conversation (system messages are not allowed)"""
 
     role: Literal["user", "assistant"]
-    content: str = Field(..., max_length=MAX_CONTENT_LENGTH)
+    content: StoredText
 
 
 class ConversationRequest(BaseModel):
@@ -49,11 +58,11 @@ class ConversationRequest(BaseModel):
 class ConversationResponse(BaseModel):
     """Response model for conversation endpoints"""
 
-    translated_text: str
+    translated_text: NfcText
     from_language: str
     to_language: str
-    original_text: str
-    response: Optional[str] = None
+    original_text: NfcText
+    response: Optional[NfcText] = None
 
 
 class BatchTranslationRequest(BaseModel):
@@ -67,7 +76,7 @@ class BatchTranslationRequest(BaseModel):
 class BatchTranslationResponse(BaseModel):
     """Response model for batch translation"""
 
-    translations: List[str]
+    translations: List[NfcText]
     from_language: str
     to_language: str
 
@@ -109,7 +118,7 @@ class AgentStep(BaseModel):
 class AgentResponse(BaseModel):
     """Response model for the agent endpoint"""
 
-    answer: str
+    answer: NfcText
     language: str
     reply_language: str
     steps: List[AgentStep]
@@ -132,7 +141,7 @@ class ChatResponse(BaseModel):
     """Response model for the chat endpoint"""
 
     conversation_id: str
-    reply: str
+    reply: NfcText
     language: str
     reply_language: str
     steps: List[AgentStep]
@@ -157,7 +166,13 @@ class WhatsAppSendRequest(BaseModel):
     """Send a WhatsApp message, optionally translated into the recipient's language"""
 
     to: str = Field(..., description="Phone number with country code, e.g. +447700900123")
-    text: Optional[str] = Field(None, min_length=1, max_length=20000)
+    text: Optional[
+        Annotated[
+            str,
+            BeforeValidator(normalize_value),
+            Field(min_length=1, max_length=20000),
+        ]
+    ] = None
     from_language: str = Field("en", description="Language of `text`")
     to_language: Optional[str] = Field(
         None, description="Translate `text` into this language first"

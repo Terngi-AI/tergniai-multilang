@@ -4,11 +4,11 @@ version = "1.0.0"
 description = "Translation and conversational API for English and Nigerian languages (Yoruba, Hausa, Igbo)"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 extend-exclude = ["venv", ".venv"]
 
 [tool.ruff.lint]
@@ -31,7 +31,7 @@ addopts = "-ra"
 filterwarnings = ["ignore::DeprecationWarning:fastapi.testclient", "ignore:Using `httpx` with `starlette.testclient`"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 ignore_missing_imports = true
 exclude = ["venv", ".venv", "tests"]
 

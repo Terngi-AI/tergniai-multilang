@@ -3,7 +3,7 @@ Retry helpers shared by upstream clients: Retry-After parsing and exponential ba
 """
 
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Optional
 
@@ -28,8 +28,8 @@ def parse_retry_after(value: Optional[str]) -> Optional[float]:
     except (TypeError, ValueError):
         return None
     if when.tzinfo is None:
-        when = when.replace(tzinfo=timezone.utc)
-    return max(0.0, (when - datetime.now(timezone.utc)).total_seconds())
+        when = when.replace(tzinfo=UTC)
+    return max(0.0, (when - datetime.now(UTC)).total_seconds())
 
 
 def retry_delay(attempt: int, response: Optional[httpx.Response]) -> Optional[float]:

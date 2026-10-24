@@ -69,6 +69,11 @@ curl http://localhost:8000/health/ready
 
 Interactive docs: <http://localhost:8000/docs>.
 
+If the API is behind a reverse proxy (ALB, Nginx or a Docker proxy), set
+`FORWARDED_ALLOW_IPS` to that proxy's IPs or CIDRs (comma-separated). Uvicorn only trusts
+`X-Forwarded-For` from those peers; without it, anonymous clients share one rate-limit bucket
+and one conversation owner. Never use `*` when the API port is reachable directly.
+
 ## 3. Languages
 
 **96 languages.** `GET /v1/languages` returns the full list.

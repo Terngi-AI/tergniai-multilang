@@ -260,6 +260,7 @@ REDIS_TIMEOUT = float(os.getenv("REDIS_TIMEOUT", "2"))
 CONVERSATION_TTL_SECONDS = int(os.getenv("CONVERSATION_TTL_SECONDS", "86400"))
 CONVERSATION_MAX_ITEMS = int(os.getenv("CONVERSATION_MAX_ITEMS", "10000"))
 CONVERSATION_MAX_MESSAGES = int(os.getenv("CONVERSATION_MAX_MESSAGES", "40"))
+CONVERSATION_MAX_CHARS = int(os.getenv("CONVERSATION_MAX_CHARS", "20000"))
 
 # How long (seconds) to skip a key after it is rejected or rate-limited
 KEY_COOLDOWN_SECONDS = float(os.getenv("KEY_COOLDOWN_SECONDS", "60"))

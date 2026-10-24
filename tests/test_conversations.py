@@ -26,6 +26,29 @@ async def test_memory_append_keeps_both_concurrent_turns():
 
 
 @pytest.mark.asyncio
+async def test_append_trims_history_to_the_character_budget(monkeypatch):
+    monkeypatch.setattr(config, "CONVERSATION_MAX_CHARS", 12)
+    conversations.clear()
+    conversation_id = await conversations.create("owner")
+
+    for text in ["one", "two", "three"]:
+        await conversations.append(
+            conversation_id,
+            "owner",
+            {"role": "user", "content": text},
+            {"role": "assistant", "content": "ok"},
+        )
+
+    stored = await conversations._store.get(conversation_id)
+    contents = [message["content"] for message in stored["messages"]]
+    assert contents == ["two", "ok", "three", "ok"]
+    assert sum(len(content) for content in contents) == 12
+
+    messages = await conversations.get(conversation_id, "owner")
+    assert [message["content"] for message in messages] == contents
+
+
+@pytest.mark.asyncio
 async def test_redis_append_keeps_both_concurrent_turns():
     fake = fakeredis.FakeAsyncRedis(decode_responses=True)
     store.set_redis(fake)

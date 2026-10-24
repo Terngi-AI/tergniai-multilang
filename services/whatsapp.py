@@ -23,6 +23,7 @@ from services import conversations
 from services.agent import run_agent
 from services.retry import RETRY_STATUS_CODES, retry_delay
 from services.store import StoreError, make_store
+from services.text import normalize_text
 from services.translator import translate_text
 
 logger = logging.getLogger(__name__)
@@ -136,6 +137,7 @@ async def _post(payload: Dict[str, Any]) -> str:
 
 async def send_text(to: str, text: str) -> List[str]:
     """Send text, split if long. Only works within 24 hours of the person's last message."""
+    text = normalize_text(text)
     return [
         await _post({"to": to, "type": "text", "text": {"body": part, "preview_url": False}})
         for part in split(text)
@@ -147,7 +149,12 @@ async def send_template(to: str, name: str, language_code: str, parameters: List
     template: Dict[str, Any] = {"name": name, "language": {"code": language_code}}
     if parameters:
         template["components"] = [
-            {"type": "body", "parameters": [{"type": "text", "text": p} for p in parameters]}
+            {
+                "type": "body",
+                "parameters": [
+                    {"type": "text", "text": normalize_text(parameter)} for parameter in parameters
+                ],
+            }
         ]
     return await _post({"to": to, "type": "template", "template": template})
 
@@ -199,7 +206,7 @@ async def reply_to(message: Dict[str, Any]) -> Optional[str]:
     key = _key(phone)
     user = await _users.get(key) or {"language": None, "conversation_id": None}
     language = user["language"]
-    text = ((message.get("text") or {}).get("body") or "").strip()
+    text = normalize_text(((message.get("text") or {}).get("body") or "").strip())
 
     if message.get("type") != "text" or not text:
         return await _say("Sorry, I can only read text messages for now.", language)

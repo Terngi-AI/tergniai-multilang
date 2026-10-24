@@ -15,6 +15,7 @@ import config
 import metrics
 from services import assistant, azure_translator, llm
 from services.store import StoreError, make_store
+from services.text import normalize_text
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,8 @@ translation_cache = make_store("translation", config.CACHE_MAX_ITEMS, config.CAC
 
 def _cache_key(from_language: str, to_language: str, text: str) -> str:
     """Fixed-length cache key, so long texts don't make huge Redis keys"""
-    return hashlib.sha256(f"{from_language}\x00{to_language}\x00{text}".encode()).hexdigest()
+    normalized = normalize_text(text)
+    return hashlib.sha256(f"{from_language}\x00{to_language}\x00{normalized}".encode()).hexdigest()
 
 
 async def _cache_get(key: str) -> Optional[str]:
@@ -109,9 +111,13 @@ async def translate_batch(texts: List[str], from_language: str, to_language: str
     Returns:
         Translated texts, in the same order as the input
     """
+    # Normalise first so composed and decomposed spellings share one cache entry and one
+    # provider request.
+    texts = [normalize_text(text) for text in texts]
+
     # If source and target languages are the same, no need to translate
     if from_language == to_language:
-        return list(texts)
+        return texts
 
     keys = [_cache_key(from_language, to_language, text) for text in texts]
     results: List[Optional[str]] = [await _cache_get(key) for key in keys]
@@ -128,10 +134,11 @@ async def translate_batch(texts: List[str], from_language: str, to_language: str
             languages=(from_language, to_language),
         )
         for i, text in zip(missing, translated, strict=True):
-            results[i] = text
-            await _cache_set(keys[i], text)
+            normalized = normalize_text(text)
+            results[i] = normalized
+            await _cache_set(keys[i], normalized)
 
-    return [result or "" for result in results]
+    return [normalize_text(result or "") for result in results]
 
 
 # Codes that detectors commonly return, mapped to the codes used by this API
@@ -169,6 +176,7 @@ async def detect_language(content: str) -> Tuple[str, float]:
     Returns:
         Tuple of (language code, confidence score between 0 and 1)
     """
+    content = normalize_text(content)
     language, score = await _run_chain(
         config.DETECTION_PROVIDERS,
         lambda: azure_translator.detect_language(content),

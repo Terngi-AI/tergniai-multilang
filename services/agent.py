@@ -18,6 +18,7 @@ from fastapi import HTTPException
 import config
 from services import llm, translator
 from services.languages import resolve_source_language
+from services.text import normalize_text
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +210,7 @@ def _system_prompt(reply_language: str) -> str:
 def _parse_step(message: Dict[str, Any]) -> Dict[str, Any]:
     """Accept a model step only if it has tool calls or a non-empty answer"""
     tool_calls = message.get("tool_calls") or []
-    content = (message.get("content") or "").strip()
+    content = normalize_text((message.get("content") or "").strip())
     if not tool_calls and not content:
         raise ValueError("empty step")
     return {"content": content, "tool_calls": tool_calls}
@@ -274,6 +275,7 @@ async def run_agent(
     if not llm.is_configured(config.AGENT_PROVIDERS, kind="openai"):
         raise HTTPException(status_code=503, detail="Agent is not configured")
 
+    message = normalize_text(message)
     source = await resolve_source_language(message, language)
     reply = reply_language or source
 
@@ -294,7 +296,7 @@ async def run_agent(
     messages: List[Dict[str, Any]] = [{"role": "system", "content": system}]
     for turn in history or []:
         if turn.get("role") in ("user", "assistant") and turn.get("content"):
-            messages.append({"role": turn["role"], "content": turn["content"]})
+            messages.append({"role": turn["role"], "content": normalize_text(turn["content"])})
     messages.append({"role": "user", "content": user_content})
 
     steps: List[Dict[str, Any]] = []
@@ -320,8 +322,9 @@ async def run_agent(
         if step["tool_calls"] and streamed and on_event is not None:
             await on_event("discard", {})
         if not step["tool_calls"]:
+            answer = await _finalise_answer(step["content"], reply, steps)
             return {
-                "answer": await _finalise_answer(step["content"], reply, steps),
+                "answer": normalize_text(answer),
                 "language": source,
                 "reply_language": reply,
                 "steps": steps,
