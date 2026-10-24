@@ -50,6 +50,8 @@ built in the open so native speakers and developers can improve it together.
   with optional multi-turn memory (`memory_context`)
 - **Translation cache** (in-memory TTL/LRU) to save quota on repeated phrases
 - **Opt-in feedback** for building an open translation evaluation set
+- **Data access and deletion** - export a conversation or delete all your chats; see
+  [docs/PRIVACY.md](docs/PRIVACY.md)
 - **API-key authentication** (`X-API-Key`) and **per-client rate limiting**
 - **Request IDs** (`X-Request-ID`) and timing headers for tracing
 - Input validation, upstream timeouts and consistent JSON error responses
@@ -231,6 +233,8 @@ only through the proxy.
 | `POST` | `/v1/chat` | **Chat** with memory: send `message` and `conversation_id` |
 | `POST` | `/v1/chat/stream` | The same chat, streamed word by word as Server-Sent Events |
 | `GET` / `DELETE` | `/v1/chat/{id}` | Read or forget a conversation |
+| `GET` | `/v1/chat/{id}/export` | Download a conversation as a JSON file |
+| `DELETE` | `/v1/chat` | Delete every conversation belonging to the caller (requires a valid API key) |
 | `GET` | `/chat` | Web chat page |
 
 📖 **Full usage guide with curl, Python and JavaScript examples: [docs/USAGE.md](docs/USAGE.md)**
@@ -409,7 +413,7 @@ config.py            Settings loaded from environment variables
 models.py            Pydantic request/response models
 routes/              HTTP endpoints
 services/            Providers (Azure, LLMs, MORENA), key rotation, cache, language helpers
-docs/                Usage guide, agent design, running MORENA
+docs/                Usage guide, agent design, privacy, running MORENA
 tests/               Pytest suite (upstream services are mocked)
 ```
 

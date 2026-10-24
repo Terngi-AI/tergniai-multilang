@@ -88,6 +88,8 @@
   details[open] { width: 100%; }
   details label { align-items: stretch; flex-wrap: wrap; }
   #api-key { flex: 1 1 100%; min-width: 0; }
+  .privacy-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .privacy-status { font-size: 12px; color: var(--muted); }
   @media (max-width: 600px) {
     .msg { max-width: 92%; }
     header { align-items: flex-start; }
@@ -122,6 +124,10 @@
   <details>
     <summary data-i18n="settings">Settings</summary>
     <label><span data-i18n="apiKeyLabel">API key</span> <input id="api-key" type="password" autocomplete="off" aria-label="API key" data-i18n-attr="placeholder:apiKeyPlaceholder" placeholder="Only if the server requires one"></label>
+    <div class="privacy-actions">
+      <button id="delete-chats" type="button" data-i18n="deleteChats">Delete my chats</button>
+      <span class="privacy-status" id="delete-status" role="status"></span>
+    </div>
   </details>
 </header>
 
@@ -166,7 +172,13 @@
       expiredError: "That conversation expired. Your next message starts a new one.",
       genericError: "Something went wrong.",
       networkError: "Couldn't reach the server. Check your connection and try again.",
-      usedTools: "used"
+      usedTools: "used",
+      deleteChats: "Delete my chats",
+      deleteConfirm: "Delete all your chats from the server? This cannot be undone.",
+      deletingChats: "Deleting…",
+      deletedChats: "Deleted {n} conversations.",
+      deletedChatsNone: "No stored chats to delete.",
+      deleteNeedsKey: "Delete-all requires an API key. Enter yours in Settings."
     },
     yo: {
       uiLangLabel: "Èdè UI:",
@@ -330,6 +342,35 @@
 
   apiKeyInput.value = store.get("terngi.apiKey") || "";
   apiKeyInput.addEventListener("change", () => store.set("terngi.apiKey", apiKeyInput.value.trim()));
+
+  const deleteChats = document.getElementById("delete-chats");
+  const deleteStatus = document.getElementById("delete-status");
+  const t = (key, fallback) => TRANSLATIONS[currentLang][key] || fallback;
+  deleteChats.addEventListener("click", async () => {
+    if (!window.confirm(t("deleteConfirm", "Delete all your chats from the server? This cannot be undone."))) return;
+    deleteChats.disabled = true;
+    deleteStatus.textContent = t("deletingChats", "Deleting…");
+    try {
+      const res = await fetch("/v1/chat", { method: "DELETE", headers: headers() });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if ((res.status === 401 || res.status === 403) && !apiKeyInput.value.trim()) {
+          throw new Error(t("deleteNeedsKey", "Delete-all requires an API key. Enter yours in Settings."));
+        }
+        throw new Error(data.message || `Could not delete chats (${res.status}).`);
+      }
+      const data = await res.json();
+      conversationId = null;
+      messages.replaceChildren();
+      deleteStatus.textContent = data.deleted
+        ? t("deletedChats", "Deleted {n} conversations.").replace("{n}", data.deleted)
+        : t("deletedChatsNone", "No stored chats to delete.");
+    } catch (err) {
+      deleteStatus.textContent = err.message || "Could not delete chats.";
+    } finally {
+      deleteChats.disabled = false;
+    }
+  });
 
   const suggestions = [
     "Ẹ káàrọ̀! Báwo ni o ṣe lè ràn mí lọ́wọ́ lónìí?",

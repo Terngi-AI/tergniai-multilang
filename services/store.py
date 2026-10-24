@@ -12,7 +12,7 @@ import logging
 import time
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 import config
 from services.cache import TTLCache
@@ -84,6 +84,10 @@ class KeyValueStore(ABC):
     async def delete(self, key: str) -> None: ...
 
     @abstractmethod
+    async def keys(self) -> List[str]:
+        """Every live key in this store (used for owner-scoped bulk deletion)"""
+
+    @abstractmethod
     def clear(self) -> None: ...
 
 
@@ -112,6 +116,9 @@ class MemoryStore(KeyValueStore):
 
     async def delete(self, key: str) -> None:
         self._cache.delete(key)
+
+    async def keys(self) -> List[str]:
+        return [key for key in self._cache.keys() if isinstance(key, str)]
 
     def clear(self) -> None:
         self._cache.clear()
@@ -236,6 +243,21 @@ class RedisStore(KeyValueStore):
             await redis.delete(data_key)
             if self.enforce_max_items:
                 await redis.zrem(self._index_key(), data_key)
+        except Exception as e:
+            raise StoreError(str(e)) from e
+
+    async def keys(self) -> List[str]:
+        if self.ttl <= 0:
+            return []
+        try:
+            redis = get_redis()
+            prefix = f"{config.REDIS_PREFIX}{self.namespace}:"
+            index_key = self._index_key()
+            found = set()
+            async for key in redis.scan_iter(match=prefix + "*"):
+                if key != index_key:
+                    found.add(key[len(prefix) :])
+            return sorted(found)
         except Exception as e:
             raise StoreError(str(e)) from e
 

@@ -116,5 +116,26 @@ async def delete(conversation_id: str, owner: str) -> bool:
     return True
 
 
+async def delete_all(owner: str) -> int:
+    """Delete every conversation belonging to `owner`; returns how many were removed"""
+    owner_hash = _owner_hash(owner)
+    try:
+        conversation_ids = await _store.keys()
+    except StoreError as e:
+        raise _unavailable(e) from e
+
+    deleted = 0
+    for conversation_id in conversation_ids:
+        entry = await _load(conversation_id)
+        if entry is None or entry.get("owner") != owner_hash:
+            continue
+        try:
+            await _store.delete(conversation_id)
+        except StoreError as e:
+            raise _unavailable(e) from e
+        deleted += 1
+    return deleted
+
+
 def clear() -> None:
     _store.clear()

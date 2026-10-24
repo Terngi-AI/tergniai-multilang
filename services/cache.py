@@ -45,6 +45,13 @@ class TTLCache:
     def delete(self, key: Hashable) -> None:
         self._data.pop(key, None)
 
+    def keys(self) -> list[Hashable]:
+        """Live keys, oldest first; expired entries are removed first"""
+        now = time.monotonic()
+        for key in [key for key, (expires, _) in self._data.items() if expires < now]:
+            del self._data[key]
+        return list(self._data)
+
     def clear(self) -> None:
         self._data.clear()
 

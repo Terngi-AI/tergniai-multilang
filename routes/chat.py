@@ -5,6 +5,7 @@ Conversational chat routes: the agent with server-side memory, plus a web chat p
 import asyncio
 import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
@@ -12,8 +13,15 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 import config
-from middleware import client_id
-from models import ChatRequest, ChatResponse, ConversationHistory, MemoryMessage
+from middleware import authenticated_key, client_id
+from models import (
+    ChatRequest,
+    ChatResponse,
+    ConversationDeleteResponse,
+    ConversationExport,
+    ConversationHistory,
+    MemoryMessage,
+)
 from services import conversations, deadline
 from services.agent import run_agent
 from services.languages import validate_language
@@ -212,6 +220,41 @@ async def get_conversation(conversation_id: str, http_request: Request):
         conversation_id=conversation_id,
         messages=[MemoryMessage.model_validate(message) for message in messages],
     )
+
+
+@router.get("/v1/chat/{conversation_id}/export", response_model=ConversationExport)
+async def export_conversation(conversation_id: str, http_request: Request, response: Response):
+    """Download one conversation as a JSON file (data access request)"""
+    messages = await conversations.get(conversation_id, client_id(http_request))
+    if messages is None:
+        raise HTTPException(status_code=404, detail="Conversation not found or expired")
+    response.headers["Content-Disposition"] = 'attachment; filename="conversation.json"'
+    return ConversationExport(
+        conversation_id=conversation_id,
+        exported_at=datetime.now(UTC).isoformat(),
+        messages=[MemoryMessage.model_validate(message) for message in messages],
+    )
+
+
+@router.delete("/v1/chat", response_model=ConversationDeleteResponse)
+async def delete_all_conversations(http_request: Request):
+    """
+    Delete every conversation belonging to the caller (data erasure request)
+
+    Delete-all is only allowed for callers identified by a valid API key: when no API key
+    is sent, ownership would fall back to the client IP, which a NAT or proxy can share
+    with other people. Delete single conversations by id instead in that case.
+    """
+    if authenticated_key(http_request) is None:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Delete-all requires a valid API key, so one caller cannot erase chats "
+                "sharing the same IP. Delete individual conversations by id instead."
+            ),
+        )
+    deleted = await conversations.delete_all(client_id(http_request))
+    return ConversationDeleteResponse(deleted=deleted)
 
 
 @router.delete("/v1/chat/{conversation_id}", status_code=204)
