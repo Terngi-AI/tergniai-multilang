@@ -323,10 +323,14 @@ FEEDBACK_MAX_RECORDS = int(os.getenv("FEEDBACK_MAX_RECORDS", "10000"))
 # Leave empty to disable authentication (e.g. for local development).
 API_KEYS = [k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()]
 
-# Optional dedicated bearer token for the Prometheus scrape endpoint. When set,
-# /metrics accepts "Authorization: Bearer <METRICS_TOKEN>" in place of an API key,
-# so the monitoring stack does not need (or leak) a key that can call the API.
-METRICS_TOKEN = os.getenv("METRICS_TOKEN", "")
+# Who shares the translation cache. "global": every caller shares one cache (most quota
+# reuse). "key": each API key has its own cache, so one caller can't probe - via cache
+# timing - whether another caller recently translated a given text. The default is "key"
+# when keys are configured, "global" otherwise (there is no key to isolate by).
+_cache_scope_default = "key" if API_KEYS else "global"
+CACHE_SCOPE = os.getenv("CACHE_SCOPE", _cache_scope_default).strip().lower()
+if CACHE_SCOPE not in ("global", "key"):
+    raise ValueError(f"CACHE_SCOPE must be 'global' or 'key', got {CACHE_SCOPE!r}")
 
 # Requests per minute allowed per client (API key or IP). 0 disables rate limiting.
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))

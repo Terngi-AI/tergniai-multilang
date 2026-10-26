@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 import config
 import metrics
 from services import deadline as request_deadline
+from services import translator
 from services.store import RedisRateLimiter, using_redis
 
 logger = logging.getLogger(__name__)
@@ -228,12 +229,28 @@ def _request_id(request: Request) -> str:
     return uuid.uuid4().hex
 
 
+def _cache_scope_for(request: Request) -> Optional[str]:
+    """
+    The translation-cache scope for this request, or None for the global cache.
+    With CACHE_SCOPE="key", each valid API key gets its own cache so one caller can't
+    probe what another caller translated; keyless requests share one "public" bucket.
+    """
+    if config.CACHE_SCOPE != "key":
+        return None
+    api_key = request.headers.get("x-api-key")
+    if config.API_KEYS and _valid_api_key(api_key):
+        # Internal identifier, never sent in a response (Semgrep's Flask XSS rule misfires)
+        return _fingerprint(api_key or "")  # nosemgrep
+    return "public"
+
+
 async def request_context(request: Request, call_next: CallNext) -> Response:
     """Attach a request ID and timing header to every response"""
     request_id = _request_id(request)
     request.state.request_id = request_id
     # Services log it with upstream errors so they can be correlated with this request
     id_token = request_deadline.set_request_id(request_id)
+    scope_token = translator.set_cache_scope(_cache_scope_for(request))
     start = time.perf_counter()
 
     try:
@@ -244,6 +261,7 @@ async def request_context(request: Request, call_next: CallNext) -> Response:
         raise
     finally:
         request_deadline.reset_request_id(id_token)
+        translator.reset_cache_scope(scope_token)
 
     elapsed = time.perf_counter() - start
     elapsed_ms = elapsed * 1000

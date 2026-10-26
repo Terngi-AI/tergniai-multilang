@@ -165,6 +165,36 @@ def test_repeat_translation_is_cached(client):
     assert route.call_count == 1
 
 
+@respx.mock
+def test_key_scope_isolates_the_cache_between_api_keys(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["key-a", "key-b"])
+    monkeypatch.setattr(config, "CACHE_SCOPE", "key")
+    route = respx.post(TRANSLATE_URL).mock(return_value=azure_translations("Bawo ni"))
+    payload = {"content": "Hello", "from_language": "en", "to_language": "yo"}
+
+    first = client.post("/v1/translate", json=payload, headers={"X-API-Key": "key-a"})
+    second = client.post("/v1/translate", json=payload, headers={"X-API-Key": "key-b"})
+    third = client.post("/v1/translate", json=payload, headers={"X-API-Key": "key-a"})
+
+    for response in (first, second, third):
+        assert response.json()["translated_text"] == "Bawo ni"
+    # key-b couldn't reuse key-a's cached translation, but key-a reuses its own
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_global_scope_shares_the_cache_between_api_keys(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["key-a", "key-b"])
+    monkeypatch.setattr(config, "CACHE_SCOPE", "global")
+    route = respx.post(TRANSLATE_URL).mock(return_value=azure_translations("Bawo ni"))
+    payload = {"content": "Hello", "from_language": "en", "to_language": "yo"}
+
+    client.post("/v1/translate", json=payload, headers={"X-API-Key": "key-a"})
+    client.post("/v1/translate", json=payload, headers={"X-API-Key": "key-b"})
+
+    assert route.call_count == 1
+
+
 def test_cache_expires_and_evicts(monkeypatch):
     now = [100.0]
     monkeypatch.setattr("services.cache.time.monotonic", lambda: now[0])

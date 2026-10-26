@@ -7,6 +7,7 @@ provider name. Unconfigured providers are skipped; if one fails the next is trie
 
 import hashlib
 import logging
+from contextvars import ContextVar
 from typing import Awaitable, Callable, List, Optional, Sequence, Tuple, TypeVar
 
 from fastapi import HTTPException
@@ -25,6 +26,20 @@ T = TypeVar("T")
 # Cache of (from_language, to_language, content, glossary) -> translated text
 translation_cache = make_store("translation", config.CACHE_MAX_ITEMS, config.CACHE_TTL_SECONDS)
 
+# Which callers share one cache entry: bound per request by the middleware when
+# config.CACHE_SCOPE is "key" - the caller's key fingerprint, or "public" for keyless
+# requests. None means the global cache.
+_cache_scope: ContextVar[Optional[str]] = ContextVar("translation_cache_scope", default=None)
+
+
+def set_cache_scope(scope: Optional[str]):
+    """Bind the cache scope for the current request; returns the token to reset with"""
+    return _cache_scope.set(scope)
+
+
+def reset_cache_scope(token) -> None:
+    _cache_scope.reset(token)
+
 
 def _cache_key(
     from_language: str, to_language: str, text: str, glossary: Optional[Glossary] = None
@@ -35,6 +50,11 @@ def _cache_key(
     entries = entries_for(glossary, to_language)
     if entries:
         payload += "\x00" + cache_signature(entries)
+    scope = _cache_scope.get()
+    if scope is not None:
+        # Entries are only shared within one scope, so one caller can't tell (from cache
+        # timing) whether another caller recently translated this text
+        payload += f"\x00{scope}"
     return hashlib.sha256(payload.encode()).hexdigest()
 
 

@@ -164,6 +164,7 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `AUTH_FAILURES_PER_MINUTE` | no | `10` | Failed API-key attempts allowed per IP per minute; `0` disables |
 | `CACHE_TTL_SECONDS` | no | `3600` | Translation cache lifetime; `0` disables |
 | `CACHE_MAX_ITEMS` | no | `1000` | Max cached translations |
+| `CACHE_SCOPE` | no | `key` when `API_KEYS` is set, else `global` | `key`: each API key has its own translation cache, so one caller can't tell (from cache timing) whether another caller recently translated a text. `global`: one shared cache for everyone - more quota reuse, no isolation |
 | `MAX_BATCH_SIZE` | no | `25` | Max texts per batch request |
 | `MAX_BATCH_CHARACTERS` | no | `50000` | Max total characters per batch |
 | `MAX_REQUEST_BYTES` | no | `1048576` | Largest request body accepted; bigger requests get `413` |
@@ -243,6 +244,11 @@ When `API_KEYS` is set, every `/v1/*` endpoint except `/v1/languages` requires a
 > If you point it at an external Redis with persistence enabled, conversation text will
 > be written to that server's disk and backups: you then own its encryption at rest and
 > backup retention.
+
+The translation cache is also shared between callers unless `CACHE_SCOPE=key` (the default
+when `API_KEYS` is set), which gives each API key its own cache. The shared cache reuses
+quota more; the per-key cache stops one caller from inferring, via cache timing, what
+another caller translated recently.
 
 ### Metrics
 

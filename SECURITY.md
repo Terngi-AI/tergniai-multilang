@@ -62,6 +62,9 @@ Supply-chain hardening:
 - Optional API-key authentication; keys are compared in constant time and never logged.
 - Per-client rate limiting. Only valid API keys count as a separate client, so made-up keys can't
   be used to dodge the limit.
+- The translation cache is scoped per API key by default when keys are configured
+  (`CACHE_SCOPE=key`), so one caller can't use cache timing to tell whether another caller
+  recently translated a given text. Set `CACHE_SCOPE=global` to share the cache again.
 - Request bodies larger than `MAX_REQUEST_BYTES` (1 MiB by default) are rejected with `413`,
   including streamed bodies without a `Content-Length`.
 - Security headers on every response: `X-Content-Type-Options`, `X-Frame-Options`,
