@@ -19,14 +19,15 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Scanner versions are pinned so a compromised "latest" image can't run in CI
+  # Scanner images are pinned by tag AND digest so a compromised or moved image can't run in CI
   SEMGREP_VERSION: "1.181.0"
   PIP_AUDIT_VERSION: "2.10.1"
-  OSV_SCANNER_IMAGE: ghcr.io/google/osv-scanner:v2.7.0
-  TRIVY_IMAGE: aquasec/trivy:0.76.0
-  ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:2.17.0
-  # The stable ClamAV image ships with the latest virus signatures at build time
-  CLAMAV_IMAGE: clamav/clamav:stable
+  OSV_SCANNER_IMAGE: ghcr.io/google/osv-scanner:v2.7.0@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0
+  TRIVY_IMAGE: aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222
+  ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:2.17.0@sha256:5ccfff9a411743ab2615136a2edd7416bec9ce41572fa94e935df38c14adb2b6
+  # Pinned to the version `stable` points to (1.5.4), by digest; the image ships current
+  # virus signatures at build time, so bump the version+digest regularly per CONTRIBUTING.md
+  CLAMAV_IMAGE: clamav/clamav:1.5.4@sha256:e19130cdebaeacc71fa46eab3ed6f69941f2f22aa5e08d55e9197f8edf43ce5e
 
 jobs:
   malware:

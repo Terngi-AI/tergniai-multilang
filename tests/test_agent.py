@@ -275,3 +275,44 @@ def test_answer_already_in_reply_language_is_kept(client):
 
     assert body["answer"] == "Asante sana"
     assert not translate.called
+
+
+# --- Generation limits --------------------------------------------------------------
+
+
+@respx.mock
+def test_agent_model_calls_are_capped_with_max_tokens(client, monkeypatch):
+    monkeypatch.setattr(config, "AGENT_MAX_TOKENS", 333)
+    route = respx.post(CHAT_URL).mock(
+        side_effect=[
+            tool_call("list_languages", {}),
+            answer("English and five African languages."),
+        ]
+    )
+
+    response = ask(client, message="Which languages do you support?")
+
+    assert response.status_code == 200
+    # Every model call in the loop — including the one that runs a tool — is capped
+    bodies = [json.loads(call.request.content) for call in route.calls]
+    assert len(bodies) == 2
+    assert all(body["max_tokens"] == 333 for body in bodies)
+
+
+@respx.mock
+def test_agent_final_answer_call_is_capped_too(client, monkeypatch):
+    monkeypatch.setattr(config, "AGENT_MAX_STEPS", 1)
+    route = respx.post(CHAT_URL).mock(
+        side_effect=[
+            tool_call("list_languages", {}),
+            answer("English and five African languages."),
+        ]
+    )
+
+    response = ask(client, message="Which languages do you support?")
+
+    assert response.status_code == 200
+    # The tool call used the single step; the final tool-less answer is capped as well
+    bodies = [json.loads(call.request.content) for call in route.calls]
+    assert len(bodies) == 2
+    assert all(body["max_tokens"] == config.AGENT_MAX_TOKENS for body in bodies)

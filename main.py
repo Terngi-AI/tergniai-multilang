@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+import metrics
 import middleware
 from config import CORS_ORIGINS, MAX_REQUEST_BYTES
 
@@ -130,7 +131,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.error(
         "Unhandled error while processing %s %s",
         request.method,
-        request.url.path,
+        metrics.route_label(request),
         exc_info=(type(exc), exc, exc.__traceback__),
     )
     return JSONResponse(

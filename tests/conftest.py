@@ -37,7 +37,7 @@ def reset_state(monkeypatch):
     Translation and detection use Azure only unless a test opts into the LLM chain.
     """
     import config
-    from middleware import rate_limiter
+    from middleware import auth_failure_limiter, rate_limiter
     from services import conversations, whatsapp
     from services.keypool import key_pool
     from services.translator import translation_cache
@@ -65,12 +65,14 @@ def reset_state(monkeypatch):
 
     translation_cache.clear()
     rate_limiter.reset()
+    auth_failure_limiter.reset()
     key_pool.reset()
     conversations.clear()
     whatsapp.clear()
     yield
     translation_cache.clear()
     rate_limiter.reset()
+    auth_failure_limiter.reset()
     key_pool.reset()
     conversations.clear()
     whatsapp.clear()

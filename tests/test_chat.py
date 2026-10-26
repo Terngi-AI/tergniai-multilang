@@ -56,6 +56,16 @@ def test_chat_is_a_general_assistant(client):
 
 
 @respx.mock
+def test_chat_model_calls_are_capped_with_max_tokens(client):
+    route = respx.post(CHAT_URL).mock(return_value=answer("Hello there!"))
+
+    say(client, "Hi")
+
+    body = json.loads(route.calls.last.request.content)
+    assert body["max_tokens"] == config.AGENT_MAX_TOKENS
+
+
+@respx.mock
 def test_get_and_delete_conversation(client):
     respx.post(CHAT_URL).mock(return_value=answer("Hello!"))
     conversation_id = say(client, "Hi").json()["conversation_id"]

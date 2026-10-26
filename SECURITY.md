@@ -72,3 +72,6 @@ Supply-chain hardening:
   conversation owners.
 - Upstream error details are logged, never returned to clients. Conversation history can't
   inject system prompts.
+- User text is sent to third-party AI providers that act as data processors. What each
+  provider receives and its retention and training terms are documented in
+  [docs/DATA.md](docs/DATA.md), which must be reviewed whenever a provider is added.

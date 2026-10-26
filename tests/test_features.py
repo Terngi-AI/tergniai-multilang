@@ -2,6 +2,8 @@
 Tests for detection, batch translation, caching, auth, rate limiting and readiness
 """
 
+import logging
+
 import httpx
 import respx
 
@@ -275,6 +277,34 @@ def test_request_id_is_generated_and_echoed(client):
     assert len(generated.headers["X-Request-ID"]) == 32
     assert echoed.headers["X-Request-ID"] == "abc123"
     assert "X-Process-Time-Ms" in echoed.headers
+
+
+def test_malformed_or_oversized_request_ids_are_replaced(client):
+    # A 129-char ID and IDs with spaces / newlines are rejected (a real client can
+    # also send non-ASCII or empty values; the regex rejects those too)
+    for bad in ["a" * 129, "has space", "log\ninjection: x", ""]:
+        response = client.get("/health", headers={"X-Request-ID": bad})
+        echoed = response.headers["X-Request-ID"]
+        assert echoed != bad
+        assert middleware.REQUEST_ID_RE.match(echoed)
+
+    # A valid ID at the size limit (128) is still accepted
+    boundary = "a" * 128
+    assert (
+        client.get("/health", headers={"X-Request-ID": boundary}).headers["X-Request-ID"]
+        == boundary
+    )
+
+
+def test_access_log_uses_route_template_not_raw_path(client, caplog):
+    conversation_id = "conversation-secret-abc123"
+
+    with caplog.at_level(logging.INFO, logger="middleware"):
+        client.get(f"/v1/chat/{conversation_id}")
+
+    logged = "\n".join(r.getMessage() for r in caplog.records if r.name == "middleware")
+    assert conversation_id not in logged
+    assert "/v1/chat/{conversation_id}" in logged
 
 
 def test_ready_when_configured(client, monkeypatch):

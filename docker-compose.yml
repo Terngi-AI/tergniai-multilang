@@ -19,15 +19,19 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:8.2-alpine
+    # Pinned by digest (multi-arch manifest list) for reproducible local stacks.
+    # Bump tag+digest together as described in CONTRIBUTING.md.
+    image: redis:8.2-alpine@sha256:d1389b3f3f981460b9b0918c4d7390c6e9decb8c69b9f09a02e1b6fd7554ade7
     # Not published to the host: only the API can reach it.
-    # volatile-lru is a safety net for the local stack: all application keys have a TTL.
+    # No persistence: everything in Redis (conversations, WhatsApp memory, translation
+    # cache) is short-lived by design, and losing it on restart is acceptable. Keeping
+    # snapshots (RDB) would write chat text to disk and in a volume that outlives the
+    # keys' TTL, extending retention beyond what is documented.
     command:
       [
         "redis-server",
         "--save",
-        "60",
-        "1",
+        "",
         "--appendonly",
         "no",
         "--maxmemory",
@@ -35,13 +39,13 @@ services:
         "--maxmemory-policy",
         "volatile-lru",
       ]
-    volumes:
-      - redis-data:/data
     restart: unless-stopped
 
   morena:
     profiles: [morena]
-    image: ghcr.io/ggml-org/llama.cpp:server
+    # Versioned llama.cpp build pinned by digest: `server` moves on every upstream build,
+    # so pin the exact build (server-b11854) and its digest. Bump together per CONTRIBUTING.md.
+    image: ghcr.io/ggml-org/llama.cpp:server-b11854@sha256:20c4196fc08b459a34ef78aaa05b101333b2fac687e30ec99f37b3c9dc071b44
     command:
       - --hf-repo
       - vamboai/morena-1.5b-instruct-gguf
@@ -61,4 +65,3 @@ services:
 
 volumes:
   morena-models:
-  redis-data:

@@ -47,6 +47,11 @@ RATE_LIMITED = Counter(
     "terngi_rate_limited_requests_total",
     "Requests rejected with 429 by the rate limiter",
 )
+AUTH_FAILURES = Counter(
+    "terngi_auth_failures_total",
+    "Failed API-key authentications",
+    ["outcome"],
+)
 
 P = ParamSpec("P")
 T = TypeVar("T")

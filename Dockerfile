@@ -1,4 +1,6 @@
-FROM python:3.12-slim
+# Pinned by digest (the multi-arch manifest list), so every build uses the exact same
+# base image. Bump the tag+digest together, as described in CONTRIBUTING.md.
+FROM python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

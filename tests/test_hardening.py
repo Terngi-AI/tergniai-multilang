@@ -31,6 +31,37 @@ def test_security_headers_on_rejected_requests(client, monkeypatch):
     assert response.headers["X-Content-Type-Options"] == "nosniff"
 
 
+def test_non_ascii_api_key_returns_401_instead_of_500(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["secret"])
+    payload = {"content": "Hi", "from_language": "en", "to_language": "yo"}
+
+    missing = client.post("/v1/translate", json=payload)
+    # Real clients send raw header bytes, which servers decode as Latin-1
+    garbage = client.post(
+        "/v1/translate",
+        json=payload,
+        headers={"X-API-Key": "clé".encode("latin-1")},
+    )
+
+    assert missing.status_code == 401
+    assert garbage.status_code == 401
+    assert garbage.json()["error"] is True
+    assert "Internal server error" not in garbage.text
+
+
+def test_rate_limit_id_handles_non_ascii_keys_without_crashing(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(config, "API_KEYS", ["secret"])
+
+    class FakeRequest:
+        headers = {"x-api-key": "clé"}
+        client = SimpleNamespace(host="127.0.0.1")
+
+    # Not a valid key, so the IP bucket is used; the key never reaches compare_digest
+    assert middleware.rate_limit_id(FakeRequest()) == "ip:127.0.0.1"
+
+
 def test_chat_page_csp_allows_its_inline_ui_only(client):
     csp = client.get("/chat").headers["Content-Security-Policy"]
 

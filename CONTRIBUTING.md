@@ -79,6 +79,9 @@ maintainer must approve.
 - CI is green (lint, types, tests on Python 3.11–3.13, Docker build, security scans).
 - Coverage stays at or above 85%.
 - New behaviour is documented in `README.md`.
+- If the change adds or removes an AI provider in `config.py`,
+  [docs/DATA.md](docs/DATA.md) is updated (what that provider receives and its retention
+  and training terms).
 - No secrets, `.env` files or large binaries are committed.
 - The Security workflow passes (malware, code, dependency, container and attack scans).
 
@@ -114,13 +117,42 @@ This project doesn't use Dependabot, so dependencies are updated by hand:
 - **GitHub Actions:** actions are pinned to a full commit SHA with the version in a comment, e.g.
   `actions/checkout@<sha> # v4.4.0`. To update one, look up the new release's commit
   (`gh api repos/actions/checkout/commits/v4.5.0 --jq .sha`) and replace both the SHA and the comment.
-- **Scanner versions** are set at the top of `security.yml`.
+- **Container images:** every image is pinned by tag **and** digest, so a moved or
+  compromised tag can't silently change what we build or run:
+  - `Dockerfile` — the `python:3.12-slim` base image;
+  - `docker-compose.yml` — `redis:8.2-alpine`, and the MORENA server, pinned to a
+    **versioned** build tag (`ghcr.io/ggml-org/llama.cpp:server-b<build>`) because the plain
+    `server` tag moves on every upstream build;
+  - `.github/workflows/security.yml` — the scanner images (OSV-Scanner, Trivy, ZAP, ClamAV;
+    ClamAV is pinned to the version its moving `stable` tag points to, since each release
+    ships fresh virus signatures), and `.github/workflows/ci.yml` — gitleaks.
+
+  Bump them about once a month, or sooner after a security advisory, in one commit that
+  changes the tag **and** the digest together. Look up a tag's digest with:
+
+  ```bash
+  docker buildx imagetools inspect python:3.12-slim
+  # prints "Name:  docker.io/library/python:3.12-slim" and "Digest: sha256:..."
+  ```
+
+  (or `curl -sI` the registry's manifest endpoint). For a new llama.cpp build, list the
+  `server-b<build>` tags in the
+  [package's versions](https://github.com/ggml-org/llama.cpp/pkgs/container/llama.cpp/versions)
+  and pin the newest one you want; Trivy already scans the image in CI.
 
 ## Adding a language
 
 1. Check the language is supported by [Azure Translator](https://learn.microsoft.com/azure/ai-services/translator/language-support).
 2. Add its code to `SUPPORTED_LANGUAGES` in `config.py`.
 3. Update the tests and the README.
+
+## Data and published content
+
+- Never commit raw user data (conversations, feedback, WhatsApp transcripts).
+- Every dataset under `data/` needs a dataset card (template: `docs/DATASET.md`) with
+  sources, licences, consent and known biases.
+- Anything published from user-generated content goes through `scripts/redact_pii.py`
+  first, and a maintainer reviews the card before merge. See `data/README.md`.
 
 ## License
 

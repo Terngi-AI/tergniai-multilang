@@ -318,6 +318,7 @@ async def run_agent(
             parse=_parse_step,
             tools=tools,
             temperature=0.3,
+            max_tokens=config.AGENT_MAX_TOKENS,
             on_token=on_token if on_event is not None else None,
         )
         deadline.check()
@@ -372,6 +373,7 @@ async def run_agent(
         config.AGENT_PROVIDERS,
         messages,
         parse=lambda text: _parse_step({"content": text})["content"],
+        max_tokens=config.AGENT_MAX_TOKENS,
     )
     deadline.check()
     answer = await _finalise_answer(answer, reply, steps)

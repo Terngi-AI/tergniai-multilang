@@ -11,6 +11,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
 
+import config
 from middleware import client_id
 from models import ChatRequest, ChatResponse, ConversationHistory, MemoryMessage
 from services import conversations, deadline
@@ -98,7 +99,11 @@ async def chat_stream(request: ChatRequest, http_request: Request):
     """
     owner = client_id(http_request)
     conversation_id, history = await _open_conversation(request, owner)
-    events: asyncio.Queue[Optional[Tuple[str, Dict[str, Any]]]] = asyncio.Queue()
+    # Bounded so a client that never (or only slowly) reads can't grow memory without
+    # limit: once full, `on_event` blocks and the agent's generation is put on hold
+    events: asyncio.Queue[Optional[Tuple[str, Dict[str, Any]]]] = asyncio.Queue(
+        maxsize=config.STREAM_QUEUE_MAXSIZE
+    )
 
     async def on_event(event: str, data: Dict[str, Any]) -> None:
         await events.put((event, data))
@@ -138,7 +143,12 @@ async def chat_stream(request: ChatRequest, http_request: Request):
             logger.exception("Unexpected chat error")
             await events.put(("error", {"message": "Chat error", "status_code": 500}))
         finally:
-            await events.put(None)
+            # End-of-stream marker. Never block on it: if the queue is full, the client
+            # stopped reading (or the deadline ended the stream), so it would sit unread
+            try:
+                events.put_nowait(None)
+            except asyncio.QueueFull:
+                pass
 
     async def stream() -> AsyncIterator[str]:
         task = asyncio.create_task(run())
@@ -152,21 +162,35 @@ async def chat_stream(request: ChatRequest, http_request: Request):
                         {"message": "Request deadline exceeded", "status_code": 504},
                     )
                     break
+                # Wait for the next event, but at most until the next heartbeat: while
+                # the agent is silent (e.g. running a slow tool call), a proxy with an
+                # idle timeout (Nginx, ALB, ...) would otherwise close the connection
+                heartbeat = config.STREAM_HEARTBEAT_SECONDS
+                if left is None:
+                    wait = heartbeat if heartbeat > 0 else None
+                else:
+                    wait = min(heartbeat, left) if heartbeat > 0 else left
                 try:
-                    item = (
-                        await asyncio.wait_for(events.get(), timeout=left)
-                        if left is not None
-                        else await events.get()
-                    )
+                    item = await asyncio.wait_for(events.get(), timeout=wait)
                 except TimeoutError:
-                    yield _sse(
-                        "error",
-                        {"message": "Request deadline exceeded", "status_code": 504},
-                    )
-                    break
+                    left = deadline.remaining()
+                    if left is not None and left <= 0:
+                        yield _sse(
+                            "error",
+                            {"message": "Request deadline exceeded", "status_code": 504},
+                        )
+                        break
+                    # An SSE comment: clients ignore it, but it resets the proxy's
+                    # idle timer
+                    yield ": keep-alive\n\n"
+                    continue
                 if item is None:
                     break
                 yield _sse(*item)
+                # done/error is the last event the producer sends, so the stream can end
+                # right away instead of waiting for the end-of-stream marker
+                if item[0] in ("done", "error"):
+                    break
         finally:
             if not task.done():  # the client went away: stop generating
                 task.cancel()
