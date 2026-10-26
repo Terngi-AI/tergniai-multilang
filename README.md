@@ -158,6 +158,9 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `MAX_CONTENT_LENGTH` | no | `5000` | Max characters per message |
 | `MAX_MEMORY_MESSAGES` | no | `20` | Max turns in `memory_context` |
 | `API_KEYS` | no | *(auth disabled)* | Comma-separated client keys accepted in `X-API-Key` |
+| `API_KEY_QUOTAS` | no | *(unlimited)* | Optional daily request quotas per key, e.g. `key1:1000,key2:5000`; over-quota requests get `429` |
+| `USAGE_TTL_SECONDS` | no | `172800` | How long per-key usage counters are kept (two days) |
+| `USAGE_MAX_ITEMS` | no | `10000` | Maximum per-key usage entries kept |
 | `METRICS_TOKEN` | no | *(off)* | Optional dedicated bearer token for `/metrics` (`Authorization: Bearer ...`), so the monitoring stack needs no API key |
 | `WHATSAPP_*` | no | *(off)* | WhatsApp bot settings, see [docs/WHATSAPP.md](docs/WHATSAPP.md) |
 | `RATE_LIMIT_PER_MINUTE` | no | `60` | Requests per minute per client; `0` disables |

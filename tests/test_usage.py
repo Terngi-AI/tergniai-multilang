@@ -135,7 +135,8 @@ def test_metrics_use_hashed_key_labels(client, monkeypatch):
     label = usage.key_label(KEY_A)
 
     client.get("/v1/languages", headers=HDR_A)
-    metrics_text = client.get("/metrics").text
+    # Send a key: /metrics needs one when auth is configured (#87)
+    metrics_text = client.get("/metrics", headers=HDR_A).text
 
     assert f'terngi_api_key_requests_total{{key="{label}"}}' in metrics_text
     assert KEY_A not in metrics_text

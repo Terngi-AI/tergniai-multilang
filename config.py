@@ -324,6 +324,40 @@ FEEDBACK_MAX_RECORDS = int(os.getenv("FEEDBACK_MAX_RECORDS", "10000"))
 # Leave empty to disable authentication (e.g. for local development).
 API_KEYS = [k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()]
 
+
+def _parse_api_key_quotas(value: str) -> Dict[str, int]:
+    """Parse `API_KEY_QUOTAS` ("key1:1000,key2:5000") into daily request limits"""
+    quotas: Dict[str, int] = {}
+    for item in value.split(","):
+        key, separator, limit = item.rpartition(":")
+        key, limit = key.strip(), limit.strip()
+        if not separator or not key or not limit:
+            if item.strip():
+                logging.getLogger(__name__).warning("Ignoring malformed API_KEY_QUOTAS entry")
+            continue
+        try:
+            daily_limit = int(limit)
+        except ValueError:
+            logging.getLogger(__name__).warning(
+                "Ignoring API_KEY_QUOTAS entry with a non-numeric limit"
+            )
+            continue
+        if daily_limit < 0:
+            logging.getLogger(__name__).warning(
+                "Ignoring API_KEY_QUOTAS entry with a negative limit"
+            )
+            continue
+        quotas[key] = daily_limit
+    return quotas
+
+
+# Optional daily request quotas per API key, counted per UTC day. Keys not listed are
+# unlimited. Quotas only apply when API_KEYS is configured.
+API_KEY_QUOTAS = _parse_api_key_quotas(os.getenv("API_KEY_QUOTAS", ""))
+# How long per-key usage counters are kept (two days covers the current and previous day)
+USAGE_TTL_SECONDS = int(os.getenv("USAGE_TTL_SECONDS", str(2 * 86400)))
+USAGE_MAX_ITEMS = int(os.getenv("USAGE_MAX_ITEMS", "10000"))
+
 # Who shares the translation cache. "global": every caller shares one cache (most quota
 # reuse). "key": each API key has its own cache, so one caller can't probe - via cache
 # timing - whether another caller recently translated a given text. The default is "key"
