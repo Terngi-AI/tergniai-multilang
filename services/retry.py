@@ -5,7 +5,7 @@ Retry helpers shared by upstream clients: Retry-After parsing and exponential ba
 import random
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 
@@ -46,3 +46,31 @@ def retry_delay(attempt: int, response: Optional[httpx.Response]) -> Optional[fl
             return retry_after if retry_after <= config.UPSTREAM_RETRY_MAX_DELAY else None
     ceiling = min(config.UPSTREAM_RETRY_MAX_DELAY, config.UPSTREAM_RETRY_BASE_DELAY * 2**attempt)
     return random.uniform(0, ceiling)  # noqa: S311 - jitter, not cryptography
+
+
+def error_summary(response: httpx.Response, max_code_chars: int = 64) -> str:
+    """
+    A log-safe summary of an upstream error: the provider's error code or type.
+
+    Providers (OpenAI-compatible and Azure alike) echo parts of the request inside
+    error *messages* — validation, content-filter and context-length errors all quote
+    the offending text. Those messages can therefore carry personal data and must never
+    be logged above DEBUG. The code/type fields are provider-defined and safe.
+    """
+    try:
+        data: Any = response.json()
+    except ValueError:
+        return "non-JSON body"
+    if not isinstance(data, dict):
+        return "non-JSON body"
+    # OpenAI-compatible errors nest under "error"; Azure uses the top level
+    containers = []
+    if isinstance(data.get("error"), dict):
+        containers.append(data["error"])
+    containers.append(data)
+    for container in containers:
+        for field in ("code", "type"):
+            value = container.get(field)
+            if isinstance(value, str) and value:
+                return f"code={value[:max_code_chars]}"
+    return "no error code"

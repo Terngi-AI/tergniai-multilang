@@ -237,7 +237,9 @@ smallest machine; use a machine with at least 1 GB of RAM or a separate service.
   authentication is configured — give your monitoring stack a dedicated `METRICS_TOKEN`
   instead, and keep both behind your proxy or firewall if the deployment is not a
   throwaway demo.
-- Review [SECURITY.md](../SECURITY.md) before exposing a production instance.
+- Review [SECURITY.md](../SECURITY.md) before exposing a production instance, and work
+  through the full threat model and operator checklist in
+  [THREAT_MODEL.md](THREAT_MODEL.md).
 
 ## Troubleshooting
 

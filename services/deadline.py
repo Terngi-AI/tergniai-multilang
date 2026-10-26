@@ -1,9 +1,11 @@
 """
-Request-scoped deadlines and upstream-attempt budgets
+Request-scoped deadlines, upstream-attempt budgets and the request ID
 
 The middleware starts a budget for every HTTP request. Services call `check()` between
 steps, use `timeout()` for each upstream call, `sleep()` for backoff, and
-`consume_attempt()` so retries and provider fallbacks share one cap.
+`consume_attempt()` so retries and provider fallbacks share one cap. The request ID
+also lives in a context variable here so service logs (e.g. upstream errors) can be
+correlated with the request.
 """
 
 import asyncio
@@ -17,6 +19,7 @@ import config
 
 _deadline: ContextVar[Optional[float]] = ContextVar("request_deadline", default=None)
 _attempts: ContextVar[int] = ContextVar("request_attempts", default=0)
+_request_id: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
 
 
 def begin(seconds: float):
@@ -28,6 +31,20 @@ def begin(seconds: float):
 def end(tokens) -> None:
     _deadline.reset(tokens[0])
     _attempts.reset(tokens[1])
+
+
+def set_request_id(request_id: str):
+    """Bind the request ID for the duration of the request (for log correlation)"""
+    return _request_id.set(request_id)
+
+
+def reset_request_id(token) -> None:
+    _request_id.reset(token)
+
+
+def request_id() -> Optional[str]:
+    """The current request ID, or None outside a request (e.g. startup work)"""
+    return _request_id.get()
 
 
 def remaining() -> Optional[float]:

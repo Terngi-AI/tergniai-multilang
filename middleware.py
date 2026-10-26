@@ -232,6 +232,8 @@ async def request_context(request: Request, call_next: CallNext) -> Response:
     """Attach a request ID and timing header to every response"""
     request_id = _request_id(request)
     request.state.request_id = request_id
+    # Services log it with upstream errors so they can be correlated with this request
+    id_token = request_deadline.set_request_id(request_id)
     start = time.perf_counter()
 
     try:
@@ -240,6 +242,8 @@ async def request_context(request: Request, call_next: CallNext) -> Response:
         # Unhandled errors become a 500 further out; count them before re-raising
         _record_request(request, 500, time.perf_counter() - start)
         raise
+    finally:
+        request_deadline.reset_request_id(id_token)
 
     elapsed = time.perf_counter() - start
     elapsed_ms = elapsed * 1000

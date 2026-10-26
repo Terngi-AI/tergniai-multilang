@@ -70,8 +70,16 @@ Supply-chain hardening:
   (as in `docker-compose.yml`) and use a password or TLS (`rediss://user:pass@host`) in
   `REDIS_URL` when it isn't local. API keys are stored only as hashes in Redis keys and
   conversation owners.
-- Upstream error details are logged, never returned to clients. Conversation history can't
-  inject system prompts.
+- Upstream error details are logged, never returned to clients. Since providers can echo the
+  user's text in error messages, `INFO`/`WARNING` logs carry only the status, the provider's
+  error code and the request ID; the (truncated) body is logged at `DEBUG` only.
+  Conversation history can't inject system prompts.
 - User text is sent to third-party AI providers that act as data processors. What each
   provider receives and its retention and training terms are documented in
   [docs/DATA.md](docs/DATA.md), which must be reviewed whenever a provider is added.
+
+## For operators
+
+Before exposing the API to the internet, work through the threat model and the operator
+checklist in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md): assets, threats and
+mitigations, and the settings to check before first startup and on a regular basis.

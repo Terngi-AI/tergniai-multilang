@@ -16,6 +16,7 @@ from services import glossary as glossary_service
 from services.glossary import Glossary
 from services.keypool import key_pool, mask
 from services.retry import RETRY_STATUS_CODES
+from services.retry import error_summary as _error_summary
 from services.retry import parse_retry_after as _parse_retry_after
 from services.retry import retry_delay as _retry_delay
 
@@ -124,10 +125,24 @@ async def _call_azure(path: str, params: Dict[str, str], texts: List[str]) -> An
             )
             await deadline.sleep(delay)
 
-    # Upstream errors are logged but not leaked to the client
+    # Upstream errors are logged but not leaked to the client; the provider's error
+    # *message* can quote the user's text, so above DEBUG we log only the status,
+    # the error code/type and the request ID
     if response is None or response.status_code != 200:
         if response is not None:
-            logger.error("Azure Translator returned %s: %s", response.status_code, response.text)
+            request_id = deadline.request_id()
+            logger.error(
+                "Azure Translator returned %s (%s)%s",
+                response.status_code,
+                _error_summary(response),
+                f" [{request_id}]" if request_id else "",
+            )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "Azure Translator returned %s, body: %s",
+                    response.status_code,
+                    response.text[:500],
+                )
         raise HTTPException(status_code=502, detail="Translation service error")
 
     try:

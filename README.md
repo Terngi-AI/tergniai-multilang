@@ -169,7 +169,7 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `MAX_REQUEST_BYTES` | no | `1048576` | Largest request body accepted; bigger requests get `413` |
 | `CORS_ORIGINS` | no | *(disabled)* | Comma-separated allowed origins |
 | `FORWARDED_ALLOW_IPS` | no | `127.0.0.1,::1` | Proxy IPs/CIDRs trusted to set `X-Forwarded-For` |
-| `LOG_LEVEL` | no | `INFO` | Python log level |
+| `LOG_LEVEL` | no | `INFO` | Python log level. Upstream error *bodies* are only logged at `DEBUG` (they can echo user text); `INFO` logs the status, error code and request ID |
 
 \* You need at least one provider. Built-in provider names are `groq`, `openrouter`,
 `together`, `cerebras`, `huggingface`, `openai`, `ollama` and `morena`; any other name works

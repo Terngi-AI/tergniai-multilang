@@ -19,7 +19,7 @@ import metrics
 from config import LLMProvider
 from services import deadline
 from services.keypool import key_pool, mask, retry_after_seconds
-from services.retry import RETRY_STATUS_CODES, retry_delay
+from services.retry import RETRY_STATUS_CODES, error_summary, retry_delay
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +145,18 @@ def _check_status(response: httpx.Response, provider: str, key: Optional[str]) -
             retry_after_seconds(response.headers.get("retry-after"), config.KEY_COOLDOWN_SECONDS),
             per_model=True,
         )
-    logger.warning("%s returned %s: %s", provider, status, response.text[:500])
+    # The provider's error *message* can quote the user's text, so above DEBUG we log
+    # only the status and the provider's error code/type, plus the request ID
+    request_id = deadline.request_id()
+    logger.warning(
+        "%s returned %s (%s)%s",
+        provider,
+        status,
+        error_summary(response),
+        f" [{request_id}]" if request_id else "",
+    )
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("%s returned %s, body: %s", provider, status, response.text[:500])
     raise _ModelFailed(f"HTTP {status}")
 
 
