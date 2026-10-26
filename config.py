@@ -332,6 +332,11 @@ CACHE_SCOPE = os.getenv("CACHE_SCOPE", _cache_scope_default).strip().lower()
 if CACHE_SCOPE not in ("global", "key"):
     raise ValueError(f"CACHE_SCOPE must be 'global' or 'key', got {CACHE_SCOPE!r}")
 
+# Optional dedicated bearer token for the Prometheus scrape endpoint. When set,
+# /metrics accepts "Authorization: Bearer <METRICS_TOKEN>" in place of an API key,
+# so the monitoring stack does not need (or leak) a key that can call the API.
+METRICS_TOKEN = os.getenv("METRICS_TOKEN", "")
+
 # Requests per minute allowed per client (API key or IP). 0 disables rate limiting.
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
 
