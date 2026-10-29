@@ -108,9 +108,12 @@ async def ready(request: Request):
         "llm": llm.is_configured(config.CHAT_PROVIDERS),
         "agent": llm.is_configured(config.AGENT_PROVIDERS, kind="openai"),
         "storage": await store.ping(),
+        "auth": bool(config.API_KEYS),
     }
     core_ready = services["translator"] or services["llm"] or services["agent"]
-    status = "not_ready" if not core_ready else "ready" if all(services.values()) else "degraded"
+    # auth is reported but never makes readiness degrade
+    health = {name: ok for name, ok in services.items() if name != "auth"}
+    status = "not_ready" if not core_ready else "ready" if all(health.values()) else "degraded"
     content: Dict[str, object] = {"status": status}
     if middleware.is_authenticated(request):
         content["services"] = services

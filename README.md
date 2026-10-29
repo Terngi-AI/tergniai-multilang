@@ -164,6 +164,7 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `USAGE_TTL_SECONDS` | no | `172800` | How long per-key usage counters are kept (two days) |
 | `USAGE_MAX_ITEMS` | no | `10000` | Maximum per-key usage entries kept |
 | `METRICS_TOKEN` | no | *(off)* | Optional dedicated bearer token for `/metrics` (`Authorization: Bearer ...`), so the monitoring stack needs no API key |
+| `ALLOW_UNAUTHENTICATED` | no | `false` | Permit startup with `API_KEYS` empty (local development only; the app refuses to start otherwise) |
 | `WHATSAPP_*` | no | *(off)* | WhatsApp bot settings, see [docs/WHATSAPP.md](docs/WHATSAPP.md) |
 | `RATE_LIMIT_PER_MINUTE` | no | `60` | Requests per minute per client; `0` disables |
 | `AUTH_FAILURES_PER_MINUTE` | no | `10` | Failed API-key attempts allowed per IP per minute; `0` disables |

@@ -17,7 +17,8 @@ server of your own. All three options below use the repository's `Dockerfile`.
    for translation and language detection. Without Azure, add an LLM provider to
    `TRANSLATION_PROVIDERS`.
 3. Generate a long random value for `API_KEYS`. Clients send it in the `X-API-Key`
-   header. Never reuse a production key for a public demo.
+   header. Never reuse a production key for a public demo. If `API_KEYS` is empty, the
+   app **refuses to start** unless `ALLOW_UNAUTHENTICATED=true` (local development only).
 4. Do not commit `.env` or put keys in the Dockerfile. Set them as host secrets.
 
 The minimum configuration for a demo is:
@@ -221,7 +222,9 @@ smallest machine; use a machine with at least 1 GB of RAM or a separate service.
 ## Protect a public demo
 
 - **Always set `API_KEYS`** for a public deployment. Without it, anyone who finds the URL
-  can spend your provider quota.
+  can spend your provider quota. The app refuses to start with `API_KEYS` empty unless
+  `ALLOW_UNAUTHENTICATED=true`, and `/health/ready` reports `"auth": false` so monitoring
+  can alert.
 - Use a dedicated demo key. Rotate it if it leaks, and keep production keys separate.
 - Keep the request limits small (`MAX_CONTENT_LENGTH`, `MAX_BATCH_SIZE`,
   `MAX_BATCH_CHARACTERS`, `MAX_REQUEST_BYTES`).
