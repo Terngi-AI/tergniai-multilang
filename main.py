@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+import config
 import metrics
 import middleware
 from config import CORS_ORIGINS, MAX_REQUEST_BYTES
@@ -25,6 +26,27 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def check_hash_secret() -> None:
+    """
+    Refuse to run without the keying secret for personal identifiers
+
+    WhatsApp phone numbers and IP-based conversation owners are stored as HMAC-SHA256
+    under HASH_SECRET. Without it they would be plain unsalted hashes, which can be
+    reversed by brute force because phone numbers and IPv4 addresses are small spaces.
+    """
+    if not config.HASH_SECRET:
+        raise SystemExit(
+            "HASH_SECRET is empty. Refusing to start: WhatsApp phone numbers and "
+            "IP-based conversation owners are keyed with HMAC-SHA256 under this "
+            "secret, and a plain unsalted hash of them could be reversed by brute "
+            'force. Generate one with: python -c "import secrets; '
+            'print(secrets.token_hex(32))" and set it as an environment variable.'
+        )
+
+
+check_hash_secret()
 
 # Initialize FastAPI app
 app = FastAPI(

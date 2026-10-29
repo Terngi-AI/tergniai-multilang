@@ -26,6 +26,7 @@ The minimum configuration for a demo is:
 GROQ_API_KEYS=gsk_...
 LLM_PROVIDERS=groq
 API_KEYS=<long-random-demo-key>
+HASH_SECRET=<64-char-random-hex>
 RATE_LIMIT_PER_MINUTE=30
 RATE_LIMIT_MAX_WAIT_SECONDS=0
 MAX_CONTENT_LENGTH=2000
@@ -70,7 +71,7 @@ instance.
 
 4. Set **Health Check Path** to `/health`.
 5. Add the environment variables from [Before you deploy](#before-you-deploy) under
-   **Environment**. Add `GROQ_API_KEYS` and `API_KEYS` as secrets.
+   **Environment**. Add `GROQ_API_KEYS`, `API_KEYS`, and `HASH_SECRET` as secrets.
 6. Deploy, then check:
 
    ```bash
@@ -147,7 +148,7 @@ have access, this is the best free-hardware option for running MORENA next to th
 
 5. In the Space's **Settings → Variables and secrets**, add the variables from
    [Before you deploy](#before-you-deploy). Use **secrets** for `GROQ_API_KEYS`,
-   `AZURE_TRANSLATOR_KEYS`, and `API_KEYS`.
+   `AZURE_TRANSLATOR_KEYS`, `API_KEYS`, and `HASH_SECRET`.
 6. Wait for the build, then open `https://YOUR_USER-YOUR_SPACE.hf.space/chat`.
 
 ### Hugging Face limits
@@ -210,7 +211,7 @@ Set `internal_port = 8000` in the generated `fly.toml`:
 Then set secrets and deploy:
 
 ```bash
-fly secrets set GROQ_API_KEYS=gsk_... API_KEYS=<long-random-demo-key>
+fly secrets set GROQ_API_KEYS=gsk_... API_KEYS=<long-random-demo-key> HASH_SECRET=<64-char-random-hex>
 fly deploy
 ```
 

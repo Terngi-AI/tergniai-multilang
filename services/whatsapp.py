@@ -18,7 +18,7 @@ import httpx
 from fastapi import HTTPException
 
 import config
-from services import conversations, deadline
+from services import conversations, deadline, identifiers
 from services.agent import run_agent
 from services.retry import RETRY_STATUS_CODES, retry_delay
 from services.store import StoreError, make_store
@@ -168,7 +168,8 @@ async def send_template(to: str, name: str, language_code: str, parameters: List
 
 
 def _key(phone: str) -> str:
-    return hashlib.sha256(phone.encode()).hexdigest()
+    # Keyed (HMAC-SHA256) so a leaked store cannot be turned back into phone numbers
+    return identifiers.keyed_hash(phone)
 
 
 async def _say(text: str, language: Optional[str]) -> str:

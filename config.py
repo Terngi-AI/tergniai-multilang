@@ -372,6 +372,12 @@ if CACHE_SCOPE not in ("global", "key"):
 # so the monitoring stack does not need (or leak) a key that can call the API.
 METRICS_TOKEN = os.getenv("METRICS_TOKEN", "")
 
+# Keying secret for personal identifiers (HMAC-SHA256): WhatsApp phone numbers and
+# IP-based conversation owners. Required — the app refuses to start without it, because
+# a plain unsalted hash of a phone number or an IP can be reversed by brute force.
+# Generate one with: python -c "import secrets; print(secrets.token_hex(32))"
+HASH_SECRET = os.getenv("HASH_SECRET", "")
+
 # Requests per minute allowed per client (API key or IP). 0 disables rate limiting.
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
 
