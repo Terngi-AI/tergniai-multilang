@@ -58,6 +58,32 @@ agent's translations.
 - Tools only read data or call the translation chain; none of them change state
 - `history` only accepts `user` and `assistant` turns, so callers can't inject system prompts
 
+## Moderation (optional)
+
+`POST /v1/chat`, `POST /v1/chat/stream` and `POST /v1/agent` can screen user messages with
+Meta's Llama Prompt Guard before they reach the chat model:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `MODERATION_PROVIDERS` | empty (disabled) | LLM providers that serve Prompt Guard, e.g. `groq` |
+| `PROMPT_GUARD_MODEL` | `meta-llama/llama-prompt-guard-2-86m` | The classifier model served by those providers |
+| `MODERATION_FAIL_MODE` | `open` | Classifier unreachable: `open` lets the request through, `closed` refuses it with `503` |
+
+When moderation is enabled:
+
+- The user's own message is classified before any model call. A flagged message is answered
+  with a polite refusal translated into the user's language; the chat model is never called.
+- Tool calls that would echo user-supplied text into the context (`translate`,
+  `detect_language`) are classified too, so an injection hidden in a tool argument never
+  reaches the model; the tool result is replaced with a blocked notice.
+- Flagged events are logged without the message text and counted in
+  `terngi_moderation_flagged_total` (label `kind` = `user_message` or `tool_result`).
+- When moderation is disabled there is no extra latency and no extra upstream call.
+
+Prompt Guard is a small classifier; it runs on the same providers as the chat model, so it
+shares their keys, models (the classifier must be listed in the provider's `MODELS`) and
+rate limits.
+
 ## Adding a tool
 
 1. Write an async function in `services/agent.py` that takes the arguments dict and returns a

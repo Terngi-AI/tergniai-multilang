@@ -253,6 +253,20 @@ AGENT_MAX_STEPS = int(os.getenv("AGENT_MAX_STEPS", "6"))
 # AGENT_MAX_STEPS calls, this bounds the cost and duration of a single agent request.
 AGENT_MAX_TOKENS = int(os.getenv("AGENT_MAX_TOKENS", "1500"))
 
+# Optional prompt-injection moderation for chat and agent (issue #38). Leave
+# MODERATION_PROVIDERS empty to disable it entirely (no extra latency). Providers are LLM
+# provider names that serve the prompt-guard classifier (e.g. Groq's
+# meta-llama/llama-prompt-guard-2-86m). MODERATION_FAIL_MODE controls what happens when the
+# classifier cannot be reached: "open" lets the request through, "closed" refuses it.
+MODERATION_PROVIDERS = _env_list("MODERATION_PROVIDERS")
+PROMPT_GUARD_MODEL = os.getenv("PROMPT_GUARD_MODEL", "meta-llama/llama-prompt-guard-2-86m")
+MODERATION_FAIL_MODE = os.getenv("MODERATION_FAIL_MODE", "open").strip().lower()
+if MODERATION_FAIL_MODE not in ("open", "closed"):
+    logging.getLogger(__name__).warning(
+        "Unknown MODERATION_FAIL_MODE %r; using 'open'", MODERATION_FAIL_MODE
+    )
+    MODERATION_FAIL_MODE = "open"
+
 # Shared storage. With REDIS_URL set (e.g. redis://localhost:6379/0), the translation cache,
 # rate limits and chat conversations are shared by every replica and survive restarts.
 # Without it they live in each process's memory.

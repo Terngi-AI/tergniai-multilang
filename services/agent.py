@@ -16,7 +16,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import HTTPException
 
 import config
-from services import deadline, llm, translator
+import metrics
+from services import deadline, llm, moderation, translator
 from services.languages import resolve_source_language
 from services.text import normalize_text
 
@@ -279,6 +280,28 @@ async def run_agent(
     source = await resolve_source_language(message, language)
     reply = reply_language or source
 
+    # Optional prompt-guard moderation (issue #38). Classify the user's own message
+    # before it reaches the chat model; a flagged message gets a polite refusal in the
+    # user's language, without calling the model.
+    if moderation.enabled():
+        try:
+            injected = await moderation.classify(message)
+        except moderation.ModerationError:
+            if moderation.fail_closed():
+                raise HTTPException(
+                    status_code=503, detail="Moderation service unavailable"
+                ) from None
+            injected = False
+        if injected:
+            metrics.MODERATION_FLAGGED.labels("user_message").inc()
+            logger.info("Moderation flagged a user message (text not logged)")
+            return {
+                "answer": await moderation.refusal(reply),
+                "language": source,
+                "reply_language": reply,
+                "steps": [],
+            }
+
     # Give the model the original message plus an English rendering of it
     user_content = message
     if source != "en":
@@ -345,16 +368,46 @@ async def run_agent(
             function = call.get("function") or {}
             name = str(function.get("name", ""))
             raw_arguments = function.get("arguments", "{}")
-            if index < MAX_TOOL_CALLS_PER_STEP:
-                output = await run_tool(name, raw_arguments)
-            else:
-                output = {"error": "Too many tool calls in one step"}
             try:
                 arguments = (
                     json.loads(raw_arguments) if isinstance(raw_arguments, str) else raw_arguments
                 )
             except ValueError:
                 arguments = raw_arguments
+
+            # Tool results that would echo user-supplied text back into the context are
+            # classified too, so an injection hidden in a translate/detect request never
+            # reaches the model. The user's own message was already checked above.
+            tool_blocked = False
+            if (
+                name in ("translate", "detect_language")
+                and isinstance(arguments, dict)
+                and isinstance(arguments.get("text"), str)
+                and arguments["text"] != message
+                and moderation.enabled()
+            ):
+                try:
+                    tool_injected = await moderation.classify(arguments["text"])
+                except moderation.ModerationError:
+                    if moderation.fail_closed():
+                        raise HTTPException(
+                            status_code=503, detail="Moderation service unavailable"
+                        ) from None
+                    tool_injected = False
+                if tool_injected:
+                    metrics.MODERATION_FLAGGED.labels("tool_result").inc()
+                    logger.info("Moderation flagged a tool result (text not logged)")
+                    output = {
+                        "error": "This content was blocked by moderation.",
+                        "moderated": True,
+                    }
+                    tool_blocked = True
+
+            if not tool_blocked:
+                if index < MAX_TOOL_CALLS_PER_STEP:
+                    output = await run_tool(name, raw_arguments)
+                else:
+                    output = {"error": "Too many tool calls in one step"}
             steps.append({"tool": name, "arguments": arguments, "output": output})
             logger.info("Agent tool %s -> %s", name, "error" if "error" in output else "ok")
             if on_event is not None:

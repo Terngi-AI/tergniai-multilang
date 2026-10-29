@@ -52,6 +52,11 @@ AUTH_FAILURES = Counter(
     "Failed API-key authentications",
     ["outcome"],
 )
+MODERATION_FLAGGED = Counter(
+    "terngi_moderation_flagged_total",
+    "User messages or tool results flagged by prompt-guard moderation",
+    ["kind"],
+)
 
 # Per-API-key usage (issue #47). Labels are short SHA-256 hashes, never the key itself.
 API_KEY_REQUESTS = Counter(
