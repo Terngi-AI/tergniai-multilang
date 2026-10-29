@@ -4,6 +4,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 CHAT_HTML = Path(__file__).resolve().parent.parent / "static" / "chat.html"
+CHAT_CSS = Path(__file__).resolve().parent.parent / "static" / "chat.css"
+CHAT_JS = Path(__file__).resolve().parent.parent / "static" / "chat.js"
 
 VOID_TAGS = {
     "area",
@@ -107,16 +109,22 @@ def test_buttons_and_summary_have_accessible_text():
 
 
 def test_interactive_elements_have_a_visible_focus_style():
-    html = CHAT_HTML.read_text(encoding="utf-8")
+    css = CHAT_CSS.read_text(encoding="utf-8")
 
-    assert ":focus-visible" in html
-    assert "outline: 3px solid var(--accent)" in html
-    assert "outline: none" not in html
+    assert ":focus-visible" in css
+    assert "outline: 3px solid var(--accent)" in css
+    assert "outline: none" not in css
+    # The stylesheet is the one the page loads
+    html = CHAT_HTML.read_text(encoding="utf-8")
+    assert 'href="/static/chat.css"' in html
 
 
 def test_final_streamed_reply_is_appended_as_one_complete_message():
-    html = CHAT_HTML.read_text(encoding="utf-8")
+    js = CHAT_JS.read_text(encoding="utf-8")
 
     # The live log announces additions. The final reply must be a new message,
     # not a text update inside the streaming bubble.
-    assert 'addMessage("bot", data.reply, meta)' in html
+    assert 'addMessage("bot", data.reply, meta)' in js
+    # The script is the one the page loads
+    html = CHAT_HTML.read_text(encoding="utf-8")
+    assert 'src="/static/chat.js"' in html

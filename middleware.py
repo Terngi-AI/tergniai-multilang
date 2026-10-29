@@ -31,6 +31,9 @@ CallNext = Callable[[Request], Awaitable[Response]]
 # shown to authenticated callers (see routes.base.ready).
 PUBLIC_PATHS = {
     "/chat",
+    # The chat page's assets (same origin, no secrets)
+    "/static/chat.css",
+    "/static/chat.js",
     # Meta calls it; every request is verified by its signature instead of an API key
     "/v1/whatsapp/webhook",
     "/",
@@ -418,9 +421,10 @@ SECURITY_HEADERS = {
 
 # The API only returns JSON, so nothing may load from it
 API_CSP = "default-src 'none'; frame-ancestors 'none'"
-# The chat page is self-contained: inline script/style, calls to this origin only
+# The chat page is self-contained: same-origin script/style only, no inline code, calls
+# to this origin only
 CHAT_CSP = (
-    "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+    "default-src 'none'; script-src 'self'; style-src 'self'; "
     "connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; "
     "frame-ancestors 'none'"
 )

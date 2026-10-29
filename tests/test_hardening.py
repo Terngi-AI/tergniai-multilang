@@ -62,12 +62,36 @@ def test_rate_limit_id_handles_non_ascii_keys_without_crashing(monkeypatch):
     assert middleware.rate_limit_id(FakeRequest()) == "ip:127.0.0.1"
 
 
-def test_chat_page_csp_allows_its_inline_ui_only(client):
+def test_chat_page_csp_loads_its_assets_only(client):
     csp = client.get("/chat").headers["Content-Security-Policy"]
 
-    assert "script-src 'self' 'unsafe-inline'" in csp
+    assert "script-src 'self'" in csp
+    assert "style-src 'self'" in csp
+    assert "unsafe-inline" not in csp
     assert "connect-src 'self'" in csp
     assert "frame-ancestors 'none'" in csp
+
+
+def test_chat_assets_are_served(client):
+    js = client.get("/static/chat.js")
+    css = client.get("/static/chat.css")
+
+    assert js.status_code == 200
+    assert "javascript" in js.headers["content-type"]
+    assert css.status_code == 200
+    assert "css" in css.headers["content-type"]
+
+
+def test_chat_assets_are_public_when_auth_is_configured(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["secret"])
+
+    assert client.get("/static/chat.js").status_code == 200
+    assert client.get("/static/chat.css").status_code == 200
+
+
+def test_unknown_static_files_are_not_served(client):
+    assert client.get("/static/config.py").status_code == 404
+    assert client.get("/static/nope.js").status_code == 404
 
 
 def test_docs_keep_working_without_csp(client):
