@@ -89,3 +89,5 @@ details label { align-items: stretch; flex-wrap: wrap; }
   .spacer { display: none; }
   details[open] { width: 100%; }
 }
+.privacy-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.privacy-status { font-size: 12px; color: var(--muted); }

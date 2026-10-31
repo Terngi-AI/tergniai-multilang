@@ -109,8 +109,10 @@ def test_chat_page_has_delete_all(client):
 
     assert response.status_code == 200
     assert "Delete my chats" in response.text
-    assert 'method: "DELETE"' in response.text
-    assert '"/v1/chat"' in response.text
+    # The page's logic lives in /static/chat.js (no inline scripts under the CSP)
+    script = client.get("/static/chat.js").text
+    assert 'method: "DELETE"' in script
+    assert '"/v1/chat"' in script
 
 
 async def test_delete_all_uses_redis_keys(monkeypatch):

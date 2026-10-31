@@ -128,3 +128,13 @@ def test_final_streamed_reply_is_appended_as_one_complete_message():
     # The script is the one the page loads
     html = CHAT_HTML.read_text(encoding="utf-8")
     assert 'src="/static/chat.js"' in html
+
+
+def test_storage_is_only_touched_inside_try_blocks():
+    """With storage blocked, even reading window.localStorage throws; the page must survive"""
+    script = CHAT_JS.read_text(encoding="utf-8")
+    assert 'safeStorage("localStorage")' in script
+    assert 'safeStorage("sessionStorage")' in script
+    code = "\n".join(line for line in script.splitlines() if not line.strip().startswith("//"))
+    assert "safeStorage(localStorage)" not in code
+    assert "localStorage." not in code and "sessionStorage." not in code

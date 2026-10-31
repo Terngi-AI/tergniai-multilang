@@ -21,7 +21,13 @@
       expiredError: "That conversation expired. Your next message starts a new one.",
       genericError: "Something went wrong.",
       networkError: "Couldn't reach the server. Check your connection and try again.",
-      usedTools: "used"
+      usedTools: "used",
+      deleteChats: "Delete my chats",
+      deleteConfirm: "Delete all your chats from the server? This cannot be undone.",
+      deletingChats: "Deleting…",
+      deletedChats: "Deleted {n} conversations.",
+      deletedChatsNone: "No stored chats to delete.",
+      deleteNeedsKey: "Delete-all requires an API key. Enter yours in Settings."
     },
     yo: {
       uiLangLabel: "Èdè UI:",
@@ -144,14 +150,15 @@
   let conversationId = null;
   let busy = false;
 
-  // localStorage access can throw (private browsing, disabled storage): fail soft
-  const safeStorage = (storage) => ({
-    get(key) { try { return storage.getItem(key); } catch { return null; } },
-    set(key, value) { try { storage.setItem(key, value); } catch {} },
-    remove(key) { try { storage.removeItem(key); } catch {} },
+  // Storage can be blocked (private browsing, cookies disabled, sandboxed frames), and
+  // then even reading window.localStorage throws. Look it up inside each try: fail soft.
+  const safeStorage = (name) => ({
+    get(key) { try { return window[name].getItem(key); } catch { return null; } },
+    set(key, value) { try { window[name].setItem(key, value); } catch {} },
+    remove(key) { try { window[name].removeItem(key); } catch {} },
   });
-  const store = safeStorage(localStorage);
-  const sessionStore = safeStorage(sessionStorage);
+  const store = safeStorage("localStorage");
+  const sessionStore = safeStorage("sessionStorage");
 
   function resolveLanguage() {
     const saved = store.get("terngi.uiLanguage");
@@ -418,6 +425,36 @@
     messages.replaceChildren();
     addMessage("bot", TRANSLATIONS[currentLang].newChatGreeting);
     input.focus();
+  });
+
+  // Delete every stored chat for this API key (#39)
+  const deleteChats = document.getElementById("delete-chats");
+  const deleteStatus = document.getElementById("delete-status");
+  const t = (key, fallback) => TRANSLATIONS[currentLang][key] || fallback;
+  deleteChats.addEventListener("click", async () => {
+    if (!window.confirm(t("deleteConfirm", "Delete all your chats from the server? This cannot be undone."))) return;
+    deleteChats.disabled = true;
+    deleteStatus.textContent = t("deletingChats", "Deleting…");
+    try {
+      const res = await fetch("/v1/chat", { method: "DELETE", headers: headers() });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if ((res.status === 401 || res.status === 403) && !apiKeyInput.value.trim()) {
+          throw new Error(t("deleteNeedsKey", "Delete-all requires an API key. Enter yours in Settings."));
+        }
+        throw new Error(data.message || `Could not delete chats (${res.status}).`);
+      }
+      const data = await res.json();
+      conversationId = null;
+      messages.replaceChildren();
+      deleteStatus.textContent = data.deleted
+        ? t("deletedChats", "Deleted {n} conversations.").replace("{n}", data.deleted)
+        : t("deletedChatsNone", "No stored chats to delete.");
+    } catch (err) {
+      deleteStatus.textContent = err.message || "Could not delete chats.";
+    } finally {
+      deleteChats.disabled = false;
+    }
   });
 
   function headers() {
