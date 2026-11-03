@@ -6,13 +6,13 @@ replica shares them and they survive restarts. They expire after CONVERSATION_TT
 inactivity. Each one belongs to the client that created it (API key or IP address).
 """
 
-import hashlib
 import uuid
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
 
 import config
+from services import identifiers
 from services.store import StoreError, make_store
 
 Message = Dict[str, str]
@@ -26,8 +26,11 @@ _store = make_store(
 
 
 def _owner_hash(owner: str) -> str:
-    """Store a hash of the owner so API keys are never kept in memory twice"""
-    return hashlib.sha256(owner.encode()).hexdigest()
+    """
+    Store a keyed hash of the owner so API keys are never kept in memory twice, and an
+    IP address is never reversible from the stored key (plain SHA-256 of an IP is not)
+    """
+    return identifiers.keyed_hash(owner)
 
 
 def _limit_history(messages: List[Message]) -> List[Message]:

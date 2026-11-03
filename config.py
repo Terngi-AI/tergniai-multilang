@@ -376,6 +376,12 @@ METRICS_TOKEN = os.getenv("METRICS_TOKEN", "")
 # leaving auth disabled is refused at startup (see main.check_authentication).
 ALLOW_UNAUTHENTICATED = os.getenv("ALLOW_UNAUTHENTICATED", "false").strip().lower() == "true"
 
+# Keying secret for personal identifiers (HMAC-SHA256): WhatsApp phone numbers and
+# IP-based conversation owners. Required — the app refuses to start without it, because
+# a plain unsalted hash of a phone number or an IP can be reversed by brute force.
+# Generate one with: python -c "import secrets; print(secrets.token_hex(32))"
+HASH_SECRET = os.getenv("HASH_SECRET", "")
+
 # Requests per minute allowed per client (API key or IP). 0 disables rate limiting.
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
 

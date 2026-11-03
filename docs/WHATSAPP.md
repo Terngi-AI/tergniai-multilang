@@ -20,7 +20,8 @@ Person ──WhatsApp──▶ Meta ──webhook──▶ POST /v1/whatsapp/web
   twice are answered once
 - Each person's language and conversation are remembered (in memory, or in Redis with
   `REDIS_URL`) for `WHATSAPP_MEMORY_TTL_SECONDS` (30 days by default). Phone numbers are
-  stored only as hashes
+  stored only as keyed hashes (HMAC-SHA256 under `HASH_SECRET`), so a leaked store cannot
+  be turned back into phone numbers
 
 ## Set up
 
@@ -31,6 +32,9 @@ Person ──WhatsApp──▶ Meta ──webhook──▶ POST /v1/whatsapp/web
 2. **Configure Terngi AI** (`.env`):
 
    ```bash
+   # Keying secret for personal identifiers (required; the app refuses to start
+   # without it). Generate one: python -c "import secrets; print(secrets.token_hex(32))"
+   HASH_SECRET=<64-char-random-hex>
    WHATSAPP_PHONE_NUMBER_ID=1234567890
    WHATSAPP_ACCESS_TOKEN=EAAG...
    WHATSAPP_APP_SECRET=...
@@ -101,6 +105,9 @@ All four of the first settings are needed; until then the WhatsApp endpoints ret
 ## Privacy
 
 Messages pass through Meta and your LLM and translation providers. Conversations are kept
-for up to `WHATSAPP_MEMORY_TTL_SECONDS`; phone numbers are stored only as SHA-256 hashes. If
+for up to `WHATSAPP_MEMORY_TTL_SECONDS`; phone numbers are stored only as keyed hashes
+(HMAC-SHA256 under `HASH_SECRET`), and the app refuses to start without it. Changing
+`HASH_SECRET` makes previously stored keys unrecoverable, i.e. existing WhatsApp memory
+and conversations are forgotten, which is acceptable because they expire on their own. If
 you handle personal data (health, finance), tell people how it is used and check your
 providers' data terms.

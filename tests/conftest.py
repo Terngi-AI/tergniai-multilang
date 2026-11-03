@@ -20,6 +20,8 @@ os.environ["ENV_FILE"] = os.devnull
 os.environ.setdefault("ALLOW_UNAUTHENTICATED", "true")
 os.environ.setdefault("AZURE_TRANSLATOR_KEY", "test-azure-key")
 os.environ.setdefault("GROQ_API_KEY", "test-groq-key")
+# Keying secret for personal identifiers; the app refuses to start without it
+os.environ.setdefault("HASH_SECRET", "test-hash-secret")
 
 from main import app  # noqa: E402
 
