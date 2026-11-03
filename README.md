@@ -75,8 +75,9 @@ cd tergniai-multilang
 python -m venv .venv && source .venv/bin/activate
 pip install --require-hashes -r requirements-dev.lock
 
-cp .env.example .env   # then fill in your keys
+cp .env.example .env   # then fill in your keys, and set API_KEYS
 uvicorn main:app --reload
+# For a quick local try without keys: ALLOW_UNAUTHENTICATED=true uvicorn main:app --reload
 ```
 
 Open **http://localhost:8000/chat** to chat in your browser, or
@@ -164,6 +165,7 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `USAGE_TTL_SECONDS` | no | `172800` | How long per-key usage counters are kept (two days) |
 | `USAGE_MAX_ITEMS` | no | `10000` | Maximum per-key usage entries kept |
 | `METRICS_TOKEN` | no | *(off)* | Optional dedicated bearer token for `/metrics` (`Authorization: Bearer ...`), so the monitoring stack needs no API key |
+| `ALLOW_UNAUTHENTICATED` | no | `false` | Permit startup with `API_KEYS` empty (local development only; the app refuses to start otherwise) |
 | `WHATSAPP_*` | no | *(off)* | WhatsApp bot settings, see [docs/WHATSAPP.md](docs/WHATSAPP.md) |
 | `RATE_LIMIT_PER_MINUTE` | no | `60` | Requests per minute per client; `0` disables |
 | `AUTH_FAILURES_PER_MINUTE` | no | `10` | Failed API-key attempts allowed per IP per minute; `0` disables |
@@ -240,6 +242,10 @@ only through the proxy.
 📖 **Full usage guide with curl, Python and JavaScript examples: [docs/USAGE.md](docs/USAGE.md)**
 
 ### Authentication & rate limits
+
+> **Upgrading:** the app now refuses to start when `API_KEYS` is empty, because every
+> endpoint would be public. Set `API_KEYS` before upgrading, or set
+> `ALLOW_UNAUTHENTICATED=true` for local development only.
 
 When `API_KEYS` is set, every `/v1/*` endpoint except `/v1/languages` requires an
 `X-API-Key` header. Each client (API key, or IP address when no key is sent) may make

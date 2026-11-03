@@ -3,9 +3,11 @@ Tests for security headers, request body limits and trusted proxy headers
 """
 
 import httpx
+import pytest
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 import config
+import main
 import middleware
 from services import conversations
 
@@ -85,6 +87,49 @@ def test_hsts_over_https():
     response = TestClient(app, base_url="https://testserver").get("/health")
 
     assert response.headers["Strict-Transport-Security"] == "max-age=31536000"
+
+
+def test_startup_refuses_unauthenticated_mode_without_the_flag(monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", [])
+    monkeypatch.setattr(config, "ALLOW_UNAUTHENTICATED", False)
+
+    with pytest.raises(SystemExit) as exc:
+        main.check_authentication()
+
+    assert "API_KEYS is empty" in str(exc.value)
+
+
+def test_startup_allows_unauthenticated_mode_with_the_flag(monkeypatch, caplog):
+    import logging
+
+    monkeypatch.setattr(config, "API_KEYS", [])
+    monkeypatch.setattr(config, "ALLOW_UNAUTHENTICATED", True)
+
+    with caplog.at_level(logging.WARNING, logger="main"):
+        main.check_authentication()
+
+    assert any("authentication is disabled" in record.message for record in caplog.records)
+
+
+def test_ready_reports_auth_enabled(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["secret"])
+
+    response = client.get("/health/ready", headers={"X-API-Key": "secret"})
+
+    assert response.status_code == 200
+    assert response.json()["services"]["auth"] is True
+
+
+def test_ready_reports_auth_disabled(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", [])
+    monkeypatch.setattr(config, "ALLOW_UNAUTHENTICATED", True)
+
+    # Auth off: readiness stays "ready", and the public view carries no service details
+    response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
+    assert "services" not in response.json()
 
 
 def test_oversized_body_is_rejected(client):
