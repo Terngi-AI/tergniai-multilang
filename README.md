@@ -37,13 +37,15 @@ built in the open so native speakers and developers can improve it together.
 - **AI agent** (`/v1/agent`) that uses tools (translation, language detection, time) behind
   the scenes, see [docs/AGENT.md](docs/AGENT.md)
 - **Multiple providers, models and keys** — Azure, Groq, OpenRouter, Together, Cerebras,
-  Hugging Face, Ollama or MORENA, tried in order; keys rotate and failing keys, models or
+  Hugging Face, Ollama, MORENA or N-ATLaS, tried in order; keys rotate and failing keys, models or
   providers are skipped automatically. Which user data each provider receives, and its
   retention and training terms: [docs/DATA.md](docs/DATA.md)
 - **WhatsApp bot**: people message your WhatsApp number in any supported language and get
   answers in that language, with memory; plus an endpoint to send messages. See
   [docs/WHATSAPP.md](docs/WHATSAPP.md)
 - **Free, local African-language model** — run [MORENA](docs/MORENA.md) with llama.cpp
+- **Native-language chat** — answer in Hausa, Igbo or Yoruba directly with [N-ATLaS](docs/NATLAS.md),
+  with no round trip through English
 - **Translate** text between any two supported languages, one at a time or in batches
 - **Auto-detect** the source language — pass `"from_language": "auto"` to any endpoint
 - **Converse** in any supported language; the reply comes back in the target language,
@@ -134,6 +136,7 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `<NAME>_MODELS` | no | provider default | Models to try in order, e.g. `GROQ_MODELS=openai/gpt-oss-120b,openai/gpt-oss-20b` |
 | `<NAME>_BASE_URL` | for custom providers | preset | OpenAI-compatible base URL |
 | `CHAT_PROVIDERS` | no | `LLM_PROVIDERS` | Providers used for `/v1/converse` |
+| `NATIVE_CHAT_PROVIDERS` | no | *(none)* | Providers asked to answer `/v1/converse` directly in the user's language, for the languages they list; see [docs/NATLAS.md](docs/NATLAS.md) |
 | `TRANSLATION_PROVIDERS` | no | `azure` + `LLM_PROVIDERS` | Providers used for translation, in order |
 | `DETECTION_PROVIDERS` | no | `azure` + LLM providers except MORENA | Providers used for language detection |
 | `AGENT_PROVIDERS` | no | OpenAI-compatible chat providers | Providers that run the agent (must support tool calling) |
@@ -148,7 +151,7 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `REDIS_TIMEOUT` | no | `2` | Redis connect/read timeout in seconds |
 | `PROVIDER_DOWN_COOLDOWN_SECONDS` | no | `30` | How long to skip a provider whose server can't be reached |
 | `RATE_LIMIT_MAX_WAIT_SECONDS` | no | `10` | When every model is rate-limited, wait this long for one to free up |
-| `<NAME>_LANGUAGES` | no | all (MORENA: its 14) | Restrict a provider to certain languages |
+| `<NAME>_LANGUAGES` | no | all (MORENA: its 14; N-ATLaS: its 4) | Restrict a provider to certain languages |
 | `KEY_COOLDOWN_SECONDS` | no | `60` | How long to skip a rate-limited key |
 | `INVALID_KEY_COOLDOWN_SECONDS` | no | `3600` | How long to skip a rejected key |
 | `REQUEST_TIMEOUT` | no | `30` | Upstream timeout in seconds |

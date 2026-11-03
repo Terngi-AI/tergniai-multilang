@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **N-ATLaS as a native chat provider (#22).** `natlas` is a built-in provider for NCAIR and Awarri's
+  Hausa, Igbo, Yoruba and English model, served by you (vLLM, TGI or an endpoint) at
+  `NATLAS_BASE_URL`. With `NATIVE_CHAT_PROVIDERS=natlas`, `/v1/converse` asks it directly for a
+  conversation between the languages it lists and returns its reply as written, with no translation to
+  English and back. If it fails, the usual flow runs. Off unless set. See
+  [docs/NATLAS.md](docs/NATLAS.md).
+
 ### Changed
 - **Python 3.11 or newer is now required.** Python 3.10 reaches end of life in October 2026,
   and the fixes for six `filelock` advisories (GHSA-v4x8-3wr5-3wq8 and others, a
