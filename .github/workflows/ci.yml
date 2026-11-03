@@ -72,7 +72,8 @@ jobs:
         run: docker build -t terngi-ai:ci .
       - name: Smoke test
         run: |
-          docker run -d --name terngi-ai -p 8000:8000 terngi-ai:ci
+          # The app refuses to start without HASH_SECRET; any fixed value works in CI
+          docker run -d --name terngi-ai -p 8000:8000 -e HASH_SECRET=ci-test-hash-secret terngi-ai:ci
           for i in $(seq 1 20); do
             if curl -fsS http://127.0.0.1:8000/health; then exit 0; fi
             sleep 1

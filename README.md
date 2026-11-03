@@ -76,6 +76,8 @@ python -m venv .venv && source .venv/bin/activate
 pip install --require-hashes -r requirements-dev.lock
 
 cp .env.example .env   # then fill in your keys
+# Required: a secret for hashing phone numbers and IPs
+python -c "import secrets; print('HASH_SECRET=' + secrets.token_hex(32))" >> .env
 uvicorn main:app --reload
 ```
 
@@ -241,6 +243,10 @@ only through the proxy.
 📖 **Full usage guide with curl, Python and JavaScript examples: [docs/USAGE.md](docs/USAGE.md)**
 
 ### Authentication & rate limits
+
+> **Upgrading:** `HASH_SECRET` is now required, and the app refuses to start without it.
+> Set it before upgrading. Stored WhatsApp memory and chat ownership are keyed with it,
+> so existing ones are forgotten once, which is safe because they expire anyway.
 
 When `API_KEYS` is set, every `/v1/*` endpoint except `/v1/languages` requires an
 `X-API-Key` header. Each client (API key, or IP address when no key is sent) may make
