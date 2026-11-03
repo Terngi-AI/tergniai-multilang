@@ -196,6 +196,50 @@ def test_conversations_stay_private_in_redis(client, redis):
     )
 
 
+@respx.mock
+async def test_delete_all_reads_only_the_owners_index(client, redis, monkeypatch):
+    # In Redis, delete-all reads the per-owner index: the other callers' conversations
+    # are neither loaded nor deleted (issue #121)
+    monkeypatch.setattr(config, "API_KEYS", ["alice", "bob"])
+    respx.post(GROQ_CHAT).mock(return_value=answer("Hi!"))
+    mine = client.post(
+        "/v1/chat", json={"message": "Hi", "language": "en"}, headers={"X-API-Key": "alice"}
+    ).json()["conversation_id"]
+    others = [
+        client.post(
+            "/v1/chat",
+            json={"message": f"Other {i}", "language": "en"},
+            headers={"X-API-Key": "bob"},
+        ).json()["conversation_id"]
+        for i in range(20)
+    ]
+
+    # One index set per owner, holding exactly that owner's conversation IDs
+    index_keys = [key async for key in redis.scan_iter("terngi:conversation-owner:*")]
+    members = []
+    for key in index_keys:
+        members.append(frozenset(await redis.smembers(key)))
+    members.sort()
+    assert members == sorted([frozenset({mine}), frozenset(others)])
+
+    loaded = []
+    real_load = conversations._load
+
+    async def spy_load(conversation_id):
+        loaded.append(conversation_id)
+        return await real_load(conversation_id)
+
+    monkeypatch.setattr(conversations, "_load", spy_load)
+
+    response = client.delete("/v1/chat", headers={"X-API-Key": "alice"})
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted": 1}
+    assert loaded == [mine]  # Bob's 20 conversations were never loaded
+    for conversation_id in others:
+        assert await redis.get(f"terngi:conversation:{conversation_id}") is not None
+
+
 def test_chat_returns_503_when_conversation_storage_is_down(client, redis_down):
     response = client.get("/v1/chat/some-id")
 
