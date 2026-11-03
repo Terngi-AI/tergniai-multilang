@@ -299,4 +299,4 @@ async def test_non_streaming_calls_are_unchanged():
 
 
 def test_chat_page_uses_streaming(client):
-    assert "/v1/chat/stream" in client.get("/chat").text
+    assert "/v1/chat/stream" in client.get("/static/chat.js").text

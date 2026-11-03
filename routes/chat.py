@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 
 import config
 from middleware import authenticated_key, client_id
@@ -31,6 +31,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 CHAT_PAGE = Path(__file__).resolve().parent.parent / "static" / "chat.html"
+
+# The chat page's assets, served from the same origin (the allow-list also blocks
+# path traversal: only these exact names exist)
+STATIC_DIR = CHAT_PAGE.parent
+STATIC_FILES = {
+    "chat.css": "text/css; charset=utf-8",
+    "chat.js": "text/javascript; charset=utf-8",
+}
 
 
 async def _open_conversation(request: ChatRequest, owner: str) -> Tuple[str, List[Dict[str, str]]]:
@@ -269,3 +277,11 @@ async def delete_conversation(conversation_id: str, http_request: Request):
 async def chat_page():
     """Web chat interface"""
     return HTMLResponse(CHAT_PAGE.read_text(encoding="utf-8"))
+
+
+@router.get("/static/{name}", include_in_schema=False)
+async def chat_static(name: str):
+    """The chat page's stylesheet and script (public, like the page itself)"""
+    if name not in STATIC_FILES:
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(STATIC_DIR / name, media_type=STATIC_FILES[name])

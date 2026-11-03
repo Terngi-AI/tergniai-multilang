@@ -186,12 +186,17 @@ def test_export_writes_jsonl(tmp_path):
 
 
 def test_chat_page_has_opt_in_feedback(client):
-    response = client.get("/chat")
+    page = client.get("/chat")
 
-    assert response.status_code == 200
-    assert "Rate this reply" in response.text
-    assert "may be stored and published" in response.text
-    assert "/v1/feedback" in response.text
+    assert page.status_code == 200
+    # The UI script is an external file (CSP forbids inline scripts).
+    assert 'src="/static/chat.js"' in page.text
+
+    js = client.get("/static/chat.js")
+    assert js.status_code == 200
+    assert "Rate this reply" in js.text
+    assert "may be stored and published" in js.text
+    assert "/v1/feedback" in js.text
 
 
 def test_feedback_storage_reads_back(client, tmp_path, monkeypatch):
