@@ -349,7 +349,17 @@ def test_ready_when_configured(client, monkeypatch):
         "llm": True,
         "agent": True,
         "storage": True,
+        "auth": True,
     }
+
+
+def test_ready_not_degraded_when_auth_is_off(client):
+    # No API keys configured: auth is reported off, but readiness stays "ready"
+    response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
+    assert "services" not in response.json()
 
 
 def test_ready_hides_service_details_from_strangers(client, monkeypatch):
