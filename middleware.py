@@ -238,7 +238,7 @@ REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 def _request_id(request: Request) -> str:
     supplied = request.headers.get("x-request-id", "")
-    if REQUEST_ID_RE.match(supplied):
+    if REQUEST_ID_RE.fullmatch(supplied):
         return supplied
     return uuid.uuid4().hex
 
