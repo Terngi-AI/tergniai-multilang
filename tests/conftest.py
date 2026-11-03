@@ -80,3 +80,12 @@ def reset_state(monkeypatch):
     whatsapp.clear()
     usage.usage_store.clear()
     usage.begin(None)
+import pytest_asyncio
+from services.http import close_http_client
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def reset_shared_http_client():
+    """Reset shared HTTP client after each test to prevent respx mock leaks."""
+    yield
+    await close_http_client()

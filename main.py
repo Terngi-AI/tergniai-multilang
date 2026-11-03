@@ -11,7 +11,12 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
+from services.http import init_http_client, close_http_client
+
+
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
 
 import metrics
 import middleware
@@ -26,11 +31,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_http_client()
+    yield
+    await close_http_client()
+
+
 app = FastAPI(
     title="Terngi Translation API",
-    description="Translation, conversation and a multilingual AI agent for African languages",
+    description="Translation, conversation and a multilingual A...",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Middleware runs in reverse order of registration:
