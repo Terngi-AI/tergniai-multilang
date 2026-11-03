@@ -75,10 +75,11 @@ cd tergniai-multilang
 python -m venv .venv && source .venv/bin/activate
 pip install --require-hashes -r requirements-dev.lock
 
-cp .env.example .env   # then fill in your keys
+cp .env.example .env   # then fill in your keys, and set API_KEYS
 # Required: a secret for hashing phone numbers and IPs
 python -c "import secrets; print('HASH_SECRET=' + secrets.token_hex(32))" >> .env
 uvicorn main:app --reload
+# For a quick local try without keys: ALLOW_UNAUTHENTICATED=true uvicorn main:app --reload
 ```
 
 Open **http://localhost:8000/chat** to chat in your browser, or
@@ -167,6 +168,7 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `USAGE_MAX_ITEMS` | no | `10000` | Maximum per-key usage entries kept |
 | `METRICS_TOKEN` | no | *(off)* | Optional dedicated bearer token for `/metrics` (`Authorization: Bearer ...`), so the monitoring stack needs no API key |
 | `HASH_SECRET` | **yes** | - | Keying secret (HMAC-SHA256) for personal identifiers: WhatsApp phone numbers and IP-based conversation owners. The app refuses to start without it; generate one with `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `ALLOW_UNAUTHENTICATED` | no | `false` | Permit startup with `API_KEYS` empty (local development only; the app refuses to start otherwise) |
 | `WHATSAPP_*` | no | *(off)* | WhatsApp bot settings, see [docs/WHATSAPP.md](docs/WHATSAPP.md) |
 | `RATE_LIMIT_PER_MINUTE` | no | `60` | Requests per minute per client; `0` disables |
 | `AUTH_FAILURES_PER_MINUTE` | no | `10` | Failed API-key attempts allowed per IP per minute; `0` disables |
@@ -244,9 +246,11 @@ only through the proxy.
 
 ### Authentication & rate limits
 
-> **Upgrading:** `HASH_SECRET` is now required, and the app refuses to start without it.
-> Set it before upgrading. Stored WhatsApp memory and chat ownership are keyed with it,
-> so existing ones are forgotten once, which is safe because they expire anyway.
+> **Upgrading:** the app now refuses to start in two cases. Set both before upgrading:
+> - `API_KEYS` empty, because every endpoint would be public. Set `API_KEYS`, or
+>   `ALLOW_UNAUTHENTICATED=true` for local development only.
+> - `HASH_SECRET` empty. Stored WhatsApp memory and chat ownership are keyed with it,
+>   so existing ones are forgotten once, which is safe because they expire anyway.
 
 When `API_KEYS` is set, every `/v1/*` endpoint except `/v1/languages` requires an
 `X-API-Key` header. Each client (API key, or IP address when no key is sent) may make

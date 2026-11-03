@@ -28,6 +28,30 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def check_authentication() -> None:
+    """
+    Refuse to run with authentication disabled outside an explicitly allowed setup
+
+    API_KEYS empty means every endpoint is public. That is only acceptable for local
+    development, where the operator opts in with ALLOW_UNAUTHENTICATED=true.
+    """
+    if config.API_KEYS:
+        return
+    if not config.ALLOW_UNAUTHENTICATED:
+        raise SystemExit(
+            "API_KEYS is empty and ALLOW_UNAUTHENTICATED is not 'true'. Refusing to "
+            "start: every endpoint would be public. Set API_KEYS, or set "
+            "ALLOW_UNAUTHENTICATED=true only for local development."
+        )
+    logger.warning(
+        "API_KEYS is empty and ALLOW_UNAUTHENTICATED=true: authentication is disabled. "
+        "Never deploy this way."
+    )
+
+
+check_authentication()
+
+
 def check_hash_secret() -> None:
     """
     Refuse to run without the keying secret for personal identifiers

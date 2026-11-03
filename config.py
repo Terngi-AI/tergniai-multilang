@@ -372,6 +372,10 @@ if CACHE_SCOPE not in ("global", "key"):
 # so the monitoring stack does not need (or leak) a key that can call the API.
 METRICS_TOKEN = os.getenv("METRICS_TOKEN", "")
 
+# Allows starting with API_KEYS empty (only for local development). In production,
+# leaving auth disabled is refused at startup (see main.check_authentication).
+ALLOW_UNAUTHENTICATED = os.getenv("ALLOW_UNAUTHENTICATED", "false").strip().lower() == "true"
+
 # Keying secret for personal identifiers (HMAC-SHA256): WhatsApp phone numbers and
 # IP-based conversation owners. Required — the app refuses to start without it, because
 # a plain unsalted hash of a phone number or an IP can be reversed by brute force.
