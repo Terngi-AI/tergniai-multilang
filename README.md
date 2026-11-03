@@ -75,8 +75,9 @@ cd tergniai-multilang
 python -m venv .venv && source .venv/bin/activate
 pip install --require-hashes -r requirements-dev.lock
 
-cp .env.example .env   # then fill in your keys
+cp .env.example .env   # then fill in your keys, and set API_KEYS
 uvicorn main:app --reload
+# For a quick local try without keys: ALLOW_UNAUTHENTICATED=true uvicorn main:app --reload
 ```
 
 Open **http://localhost:8000/chat** to chat in your browser, or
@@ -241,6 +242,10 @@ only through the proxy.
 📖 **Full usage guide with curl, Python and JavaScript examples: [docs/USAGE.md](docs/USAGE.md)**
 
 ### Authentication & rate limits
+
+> **Upgrading:** the app now refuses to start when `API_KEYS` is empty, because every
+> endpoint would be public. Set `API_KEYS` before upgrading, or set
+> `ALLOW_UNAUTHENTICATED=true` for local development only.
 
 When `API_KEYS` is set, every `/v1/*` endpoint except `/v1/languages` requires an
 `X-API-Key` header. Each client (API key, or IP address when no key is sent) may make

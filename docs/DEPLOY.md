@@ -223,8 +223,8 @@ smallest machine; use a machine with at least 1 GB of RAM or a separate service.
 
 - **Always set `API_KEYS`** for a public deployment. Without it, anyone who finds the URL
   can spend your provider quota. The app refuses to start with `API_KEYS` empty unless
-  `ALLOW_UNAUTHENTICATED=true`, and `/health/ready` reports `"auth": false` so monitoring
-  can alert.
+  `ALLOW_UNAUTHENTICATED=true`, and then logs a warning at startup that authentication
+  is disabled.
 - Use a dedicated demo key. Rotate it if it leaks, and keep production keys separate.
 - Keep the request limits small (`MAX_CONTENT_LENGTH`, `MAX_BATCH_SIZE`,
   `MAX_BATCH_CHARACTERS`, `MAX_REQUEST_BYTES`).
