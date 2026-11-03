@@ -12,7 +12,7 @@ from services.languages import validate_language
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["account"])
 
 
 @router.post("/v1/feedback", response_model=FeedbackResponse)

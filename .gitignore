@@ -25,6 +25,7 @@ htmlcov/
 
 # Local data
 feedback.jsonl
+openapi.json
 
 # Editors / OS
 .vscode/
