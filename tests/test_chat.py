@@ -140,7 +140,12 @@ def test_chat_page_is_served(client, monkeypatch):
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "Terngi" in response.text
-    assert "/v1/chat" in response.text
+    # The page is self-hosted: no inline script/style, assets from the same origin
+    assert "<script>" not in response.text
+    assert "<style>" not in response.text
+    assert 'src="/static/chat.js"' in response.text
+    assert 'href="/static/chat.css"' in response.text
+    assert "/v1/chat" in client.get("/static/chat.js").text
 
 
 # --- Languages per provider --------------------------------------------------
