@@ -1,0 +1,88 @@
+name: Issue assignment
+
+# Contributors claim an issue and are assigned to it before opening a PR for it (see
+# CONTRIBUTING.md). This check fails a PR from outside the team unless it links an issue
+# ("Closes #123") that is assigned to the PR's author.
+#
+# pull_request_target is used so the check can comment on PRs from forks. It is safe here
+# because the job never checks out or runs the PR's code and never passes PR text to a
+# shell: it only reads the PR's linked issues through the GitHub API.
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-assignment-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  assigned:
+    name: Linked issue is assigned to the author
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: read
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+            const { owner, repo } = context.repo;
+
+            // Maintainers and bots don't need to claim issues
+            if (["OWNER", "MEMBER", "COLLABORATOR"].includes(pr.author_association) || pr.user.type === "Bot") {
+              core.info(`${author} is a maintainer or bot; no assignment needed.`);
+              return;
+            }
+
+            const { repository } = await github.graphql(
+              `query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    closingIssuesReferences(first: 10) {
+                      nodes { number assignees(first: 20) { nodes { login } } }
+                    }
+                  }
+                }
+              }`,
+              { owner, repo, number: pr.number },
+            );
+            const issues = repository.pullRequest.closingIssuesReferences.nodes;
+            const assignedToAuthor = issues.filter((issue) =>
+              issue.assignees.nodes.some((a) => a.login.toLowerCase() === author.toLowerCase()),
+            );
+            if (assignedToAuthor.length > 0) {
+              core.info(`Linked issue #${assignedToAuthor[0].number} is assigned to ${author}.`);
+              return;
+            }
+
+            const linked = issues.map((issue) => `#${issue.number}`).join(", ");
+            const problem = issues.length === 0
+              ? "this PR doesn't link an issue"
+              : `the linked issue (${linked}) isn't assigned to you`;
+            const marker = "<!-- issue-assignment-check -->";
+            const body = [
+              marker,
+              `Thanks for the PR, @${author}! Before it can be reviewed, ${problem}.`,
+              "",
+              "We ask contributors to claim an issue first, so two people don't work on the same thing:",
+              "1. Comment on the issue that you'd like to work on it.",
+              "2. Wait for a maintainer to assign it to you.",
+              "3. Add `Closes #<issue>` to this PR's description. Editing the description re-runs this check.",
+              "",
+              `See [CONTRIBUTING.md](${context.serverUrl}/${owner}/${repo}/blob/develop/CONTRIBUTING.md#claim-an-issue-before-you-start).`,
+            ].join("\n");
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: pr.number, per_page: 100,
+            });
+            if (!comments.some((c) => c.body && c.body.includes(marker))) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body });
+            }
+            core.setFailed(`Issue assignment: ${problem}.`);
