@@ -86,11 +86,12 @@ def test_no_provider_configured_returns_503(client, chain, monkeypatch):
     monkeypatch.setattr(config, "LLM_PROVIDERS", {})
 
     assert translate(client).status_code == 503
-    # The public (unauthenticated) readiness view carries only the status
+    # No API keys are configured here, so the readiness view also carries the
+    # service details (nothing is protected), and it reports "not_ready"
     ready = client.get("/health/ready")
     assert ready.status_code == 503
     assert ready.json()["status"] == "not_ready"
-    assert "services" not in ready.json()
+    assert ready.json()["services"]["translator"] is False
 
 
 @respx.mock

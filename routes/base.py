@@ -101,7 +101,8 @@ async def ready(request: Request):
     draining every replica when Redis has a blip.
 
     The probe itself is public (load balancers), but the per-service list reveals the
-    configuration, so it is only included for authenticated callers.
+    configuration, so it is only included for authenticated callers — or for everyone
+    when no keys are configured, since then there is nothing to protect.
     """
     services = {
         "translator": translation_available(),
@@ -115,7 +116,7 @@ async def ready(request: Request):
     health = {name: ok for name, ok in services.items() if name != "auth"}
     status = "not_ready" if not core_ready else "ready" if all(health.values()) else "degraded"
     content: Dict[str, object] = {"status": status}
-    if middleware.is_authenticated(request):
+    if not config.API_KEYS or middleware.is_authenticated(request):
         content["services"] = services
     return JSONResponse(
         status_code=200 if core_ready else 503,
