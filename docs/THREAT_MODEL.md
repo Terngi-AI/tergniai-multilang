@@ -3,7 +3,7 @@
 This is a threat model for **deploying** Terngi AI: what the operator must protect, what
 the application already defends against, and what must be configured. It complements
 [SECURITY.md](../SECURITY.md) (vulnerability reporting and the CI security scans) and
-[DEPLOY.md](DEPLOY.md) (free hosting options). Last reviewed: 2026-10-25.
+[DEPLOY.md](DEPLOY.md) (free hosting options). Last reviewed: 2026-11-04.
 
 ## Assets
 
@@ -44,9 +44,9 @@ No configuration needed; these are on for every deployment:
 | 3 | Quota abuse by a hostile or careless client | Rate limits, deadlines, attempt caps, size limits | Keep `RATE_LIMIT_PER_MINUTE` and the `MAX_*` limits small on public instances — [DEPLOY.md → Protect a public demo](DEPLOY.md#protect-a-public-demo) |
 | 4 | Prompt injection or abuse through `/v1/chat`, `/v1/agent` | History can't inject system prompts; agent step limit; (abuse detection is tracked in [#38](https://github.com/Terngi-AI/tergniai-multilang/issues/38)) | Keep `AGENT_MAX_STEPS` low; review logs for abuse patterns |
 | 5 | Spam or abuse through `/v1/whatsapp/send` | The endpoint requires `X-API-Key`; Meta's 24-hour window and template rules apply | Send only to people who consented, with approved templates — [WHATSAPP.md → Sending messages](WHATSAPP.md#sending-messages) |
-| 6 | Data at rest in Redis (cache, conversations, WhatsApp memory) | Redis is optional; keys and owners are stored only as hashes | If you enable it: private network, TLS + password, and no disk persistence visible to anyone — [SECURITY.md → Runtime protections](../SECURITY.md#runtime-protections); compose snapshots are addressed in [#85](https://github.com/Terngi-AI/tergniai-multilang/issues/85) |
-| 7 | Logs leak user content | Bodies are never logged | Access logs contain URL paths, and chat paths include conversation IDs — collect logs carefully and keep retention short ([`LOG_LEVEL`](../.env.example)) |
-| 8 | The `/chat` web page | Same-origin, strict CSP | It stores the API key in the browser's localStorage, so don't publish `/chat` on a machine shared with untrusted people ([#86](https://github.com/Terngi-AI/tergniai-multilang/issues/86)) |
+| 6 | Data at rest in Redis (cache, conversations, WhatsApp memory) | Redis is optional; keys and owners are stored only as hashes | If you enable it: private network, TLS + password, and no disk persistence visible to anyone — [SECURITY.md → Runtime protections](../SECURITY.md#runtime-protections); the bundled compose stack runs Redis **without persistence** ([#85](https://github.com/Terngi-AI/tergniai-multilang/issues/85)) |
+| 7 | Logs leak user content | Bodies are never logged; access logs record the route template, so conversation IDs never reach the logs (#107) | Keep log retention short and review what your log pipeline collects ([`LOG_LEVEL`](../.env.example)) |
+| 8 | The `/chat` web page | Same-origin, strict CSP (no inline scripts) | The API key stays in `sessionStorage` by default and is cleared when the browser closes; it is only kept in `localStorage` if the user ticks "Remember on this device" — so don't tick that on a machine shared with untrusted people |
 | 9 | Compromised CI or self-hosted runner | Pinned actions, read-only token, `pull_request` (never `pull_request_target`) triggers, workflow approval for first-time contributors | Approve external runs, keep self-hosted runners patched and isolated — [SECURITY.md → Automated security scanning](../SECURITY.md#automated-security-scanning) |
 | 10 | Supply chain: a tampered package, image or action | Hash-locked requirements, pinned action SHAs, digest-pinned images, daily Trivy/OSV/pip-audit scans | Bump the pins when advisories land — [CONTRIBUTING.md → Security checks and dependencies](../CONTRIBUTING.md#security-checks-and-dependencies) |
 
@@ -64,10 +64,10 @@ Run through this before exposing the API, and re-check it after every change.
       proxy](../README.md#running-behind-a-reverse-proxy)
 - [ ] **`CORS_ORIGINS` left empty** unless a browser app on another origin genuinely needs
       to call the API. — [`CORS_ORIGINS` in .env.example](../.env.example)
-- [ ] **`/metrics` and `/health/ready` are not public** — they reveal configuration and
-      traffic. Block them at the proxy for now; optional auth for them is tracked in
-      [#87](https://github.com/Terngi-AI/tergniai-multilang/issues/87). — [README →
-      Metrics](../README.md#metrics)
+- [ ] **`/metrics` needs a key to scrape** — it accepts an API key or the dedicated
+      `METRICS_TOKEN` bearer token, and `/health/ready` only shows its per-service details
+      to authenticated callers (#106). Block both at the proxy if you want zero public
+      surface. — [README → Metrics](../README.md#metrics)
 - [ ] **If `REDIS_URL` is set: private network, TLS + password, and persistence you can
       protect** (snapshots contain conversations). — [SECURITY.md → Runtime
       protections](../SECURITY.md#runtime-protections)
@@ -80,8 +80,8 @@ Run through this before exposing the API, and re-check it after every change.
 - [ ] **Check each provider's retention and training settings** and enable zero-retention
       options where you can get them (each provider's console; the project tracks the
       terms per provider in `docs/DATA.md`).
-- [ ] **Keep log retention short**: access logs carry URL paths, and chat paths include
-      the conversation ID. — [`LOG_LEVEL` in .env.example](../.env.example)
+- [ ] **Keep log retention short**: access logs record route templates, not raw paths,
+      so conversation IDs never reach the logs (#107). — [`LOG_LEVEL` in .env.example](../.env.example)
 - [ ] **Keep a dedicated key per environment**: never reuse a production key on a public
       demo. — [DEPLOY.md → Protect a public demo](DEPLOY.md#protect-a-public-demo)
 - [ ] **Bump dependency and image pins** when an advisory lands (the daily scan tells
