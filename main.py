@@ -101,7 +101,7 @@ OPENAPI_TAGS = [
 # Initialize FastAPI app
 app = FastAPI(
     title="Terngi Translation API",
-    description="Translation, conversation and a multilingual AI agent for African languages",
+    description="Translation, conversation and a multilingual AI agent for local languages",
     version="1.0.0",
     openapi_tags=OPENAPI_TAGS,
 )
