@@ -20,7 +20,7 @@ from services.translator import detect_language, translate_batch, translate_text
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["translation"])
 
 
 @router.post("/v1/translate", response_model=TranslationResponse)

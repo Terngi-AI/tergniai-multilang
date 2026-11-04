@@ -18,7 +18,7 @@ from services.translator import translation_available
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("/", tags=["health"], openapi_extra={"security": []})
 async def root():
     """Root endpoint returning API information"""
     return {
@@ -27,19 +27,19 @@ async def root():
     }
 
 
-@router.get("/v1/languages")
+@router.get("/v1/languages", tags=["health"], openapi_extra={"security": []})
 async def get_supported_languages():
     """Get list of supported languages"""
     return {"languages": SUPPORTED_LANGUAGES}
 
 
-@router.get("/health")
+@router.get("/health", tags=["health"], openapi_extra={"security": []})
 async def health():
     """Liveness probe used by Docker and load balancers"""
     return {"status": "ok"}
 
 
-@router.get("/v1/usage", response_model=UsageResponse)
+@router.get("/v1/usage", response_model=UsageResponse, tags=["account"])
 async def usage_report(http_request: Request):
     """
     Daily usage for the calling API key
@@ -91,7 +91,7 @@ async def prometheus_metrics() -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-@router.get("/health/ready")
+@router.get("/health/ready", tags=["health"], openapi_extra={"security": []})
 async def ready(request: Request):
     """
     Readiness probe for translation, chat and the optional agent path.

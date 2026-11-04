@@ -4,12 +4,13 @@ Main application entry point for Terngi Translation API
 
 import logging
 import os
-from typing import Dict
+from typing import Any, Dict
 
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -72,11 +73,37 @@ def check_hash_secret() -> None:
 
 check_hash_secret()
 
+
+# Endpoint groups shown in /docs, in the order they are listed
+OPENAPI_TAGS = [
+    {
+        "name": "translation",
+        "description": "Translate one or many texts, and detect the language of a text",
+    },
+    {
+        "name": "conversation",
+        "description": "Multilingual chat (with streaming), the tool-using agent and /v1/converse",
+    },
+    {
+        "name": "whatsapp",
+        "description": "Send WhatsApp messages on the connected business number",
+    },
+    {
+        "name": "account",
+        "description": "Per-key usage and opt-in translation feedback",
+    },
+    {
+        "name": "health",
+        "description": "Public status, readiness and supported-language reference endpoints",
+    },
+]
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Terngi Translation API",
     description="Translation, conversation and a multilingual AI agent for African languages",
     version="1.0.0",
+    openapi_tags=OPENAPI_TAGS,
 )
 
 # Middleware runs in reverse order of registration:
@@ -106,6 +133,36 @@ app.include_router(agent.router)
 app.include_router(chat.router)
 app.include_router(feedback.router)
 app.include_router(whatsapp.router)
+
+
+def _openapi() -> Dict[str, Any]:
+    """
+    Build the OpenAPI schema with the API key scheme the middleware enforces
+
+    Authentication happens in middleware (see middleware.authenticate), so FastAPI does
+    not see it: declare the scheme here so /docs shows an "Authorize" button, and
+    require it on every operation (public routes opt out with security=[]).
+    """
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+        tags=OPENAPI_TAGS,
+    )
+    schema.setdefault("components", {})["securitySchemes"] = {
+        "ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+    }
+    schema["security"] = [{"ApiKeyAuth": []}]
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+# Swap in the schema builder so /openapi.json, /docs and the export script all carry
+# the API key scheme
+app.openapi = _openapi  # type: ignore[method-assign]
 
 
 _ERROR_CODES = {

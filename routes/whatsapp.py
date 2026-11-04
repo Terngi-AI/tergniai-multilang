@@ -14,7 +14,7 @@ from services import whatsapp
 from services.languages import validate_language
 from services.translator import translate_text
 
-router = APIRouter()
+router = APIRouter(tags=["whatsapp"])
 
 
 def _require_configured() -> None:
