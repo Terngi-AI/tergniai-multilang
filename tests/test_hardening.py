@@ -148,12 +148,13 @@ def test_ready_reports_auth_disabled(client, monkeypatch):
     monkeypatch.setattr(config, "API_KEYS", [])
     monkeypatch.setattr(config, "ALLOW_UNAUTHENTICATED", True)
 
-    # Auth off: readiness stays "ready", and the public view carries no service details
+    # Auth off: readiness stays "ready", and with no keys configured the service
+    # details are shown to everyone, since there is nothing to protect
     response = client.get("/health/ready")
 
     assert response.status_code == 200
     assert response.json()["status"] == "ready"
-    assert "services" not in response.json()
+    assert response.json()["services"]["auth"] is False
 
 
 def test_oversized_body_is_rejected(client):
