@@ -119,7 +119,7 @@ jobs:
           # Rate limiting is off so the scanner's requests aren't all rejected with 429.
           # Auth is off so the scanner reaches every endpoint, not just the 401 handler.
           docker run -d --name api -p 8000:8000 -e RATE_LIMIT_PER_MINUTE=0 \
-            -e ALLOW_UNAUTHENTICATED=true terngi-ai:scan
+            -e ALLOW_UNAUTHENTICATED=true -e HASH_SECRET=ci-test-hash-secret terngi-ai:scan
           for i in $(seq 1 30); do curl -fsS http://localhost:8000/health && exit 0; sleep 1; done
           docker logs api
           exit 1

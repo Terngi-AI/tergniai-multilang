@@ -73,7 +73,9 @@ jobs:
       - name: Smoke test
         run: |
           # The app refuses to start without API_KEYS (or ALLOW_UNAUTHENTICATED=true)
-          docker run -d --name terngi-ai -p 8000:8000 -e API_KEYS=ci-smoke-test-key terngi-ai:ci
+          # and without HASH_SECRET; any fixed values work in CI
+          docker run -d --name terngi-ai -p 8000:8000 -e API_KEYS=ci-smoke-test-key \
+            -e HASH_SECRET=ci-test-hash-secret terngi-ai:ci
           for i in $(seq 1 20); do
             if curl -fsS http://127.0.0.1:8000/health; then exit 0; fi
             sleep 1

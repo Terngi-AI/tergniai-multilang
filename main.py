@@ -53,6 +53,27 @@ def check_authentication() -> None:
 check_authentication()
 
 
+def check_hash_secret() -> None:
+    """
+    Refuse to run without the keying secret for personal identifiers
+
+    WhatsApp phone numbers and IP-based conversation owners are stored as HMAC-SHA256
+    under HASH_SECRET. Without it they would be plain unsalted hashes, which can be
+    reversed by brute force because phone numbers and IPv4 addresses are small spaces.
+    """
+    if not config.HASH_SECRET:
+        raise SystemExit(
+            "HASH_SECRET is empty. Refusing to start: WhatsApp phone numbers and "
+            "IP-based conversation owners are keyed with HMAC-SHA256 under this "
+            "secret, and a plain unsalted hash of them could be reversed by brute "
+            'force. Generate one with: python -c "import secrets; '
+            'print(secrets.token_hex(32))" and set it as an environment variable.'
+        )
+
+
+check_hash_secret()
+
+
 # Endpoint groups shown in /docs, in the order they are listed
 OPENAPI_TAGS = [
     {

@@ -54,8 +54,8 @@ What each provider receives, and its current retention and training terms:
 | Data | Stored as | Where | Kept for |
 |---|---|---|---|
 | Translation cache | `sha256(source, target, text)` → translated text | in-process memory, or your Redis | `CACHE_TTL_SECONDS` (default 1 h), at most `CACHE_MAX_ITEMS` (1000) entries; `CACHE_TTL_SECONDS=0` disables it |
-| Chat conversations | `sha256(owner)` + conversation ID → up to 40 messages / 20,000 characters | in-process memory, or your Redis | `CONVERSATION_TTL_SECONDS` (default 24 h of inactivity); the client can delete with `DELETE /v1/chat/{id}` |
-| WhatsApp memory | `sha256(phone number)` → preferred language + last 20 messages | in-process memory, or your Redis | `WHATSAPP_MEMORY_TTL_SECONDS` (default 30 days), at most 10,000 users |
+| Chat conversations | `HMAC-SHA256(HASH_SECRET, owner)` + conversation ID → up to 40 messages / 20,000 characters | in-process memory, or your Redis | `CONVERSATION_TTL_SECONDS` (default 24 h of inactivity); the client can delete with `DELETE /v1/chat/{id}` |
+| WhatsApp memory | `HMAC-SHA256(HASH_SECRET, phone number)` → preferred language + last 20 messages | in-process memory, or your Redis | `WHATSAPP_MEMORY_TTL_SECONDS` (default 30 days), at most 10,000 users |
 | WhatsApp deduplication | message IDs marked "seen" | in-process memory, or your Redis | 24 h (guards against Meta retrying a webhook) |
 | Rate-limit counters | API-key fingerprint or IP → request counts | in-process memory, or your Redis | one-minute windows |
 
