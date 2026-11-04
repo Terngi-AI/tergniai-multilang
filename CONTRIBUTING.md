@@ -139,11 +139,14 @@ This project doesn't use Dependabot, so dependencies are updated by hand:
     **versioned** build tag (`ghcr.io/ggml-org/llama.cpp:server-b<build>`) because the plain
     `server` tag moves on every upstream build;
   - `.github/workflows/security.yml` — the scanner images (OSV-Scanner, Trivy, ZAP, ClamAV;
-    ClamAV is pinned to the version its moving `stable` tag points to, since each release
-    ships fresh virus signatures), and `.github/workflows/ci.yml` — gitleaks.
+    ClamAV is pinned to the version its moving `stable` tag points to), and
+    `.github/workflows/ci.yml` — gitleaks.
 
   Bump them about once a month, or sooner after a security advisory, in one commit that
-  changes the tag **and** the digest together. Look up a tag's digest with:
+  changes the tag **and** the digest together. The ClamAV pin is the exception to the
+  regular cadence: the malware job refreshes the virus signatures with `freshclam` before
+  every scan, so its digest only needs bumping when a new ClamAV release ships. Look up a
+  tag's digest with:
 
   ```bash
   docker buildx imagetools inspect python:3.12-slim
