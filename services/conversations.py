@@ -26,9 +26,10 @@ _store = make_store(
 
 # Per-owner index of conversation IDs: delete_all reads only this, so it never has to
 # load every stored conversation to find the caller's ones (issue #121). In Redis it is
-# one set per owner, refreshed with the conversations' TTL; in memory a plain set. Stale
-# entries (an expired or evicted conversation) are harmless: delete_all skips anything
-# that is gone or belongs to another owner.
+# one set per owner, re-added and re-expired on every save so it stays alive as long as
+# the conversations it tracks; in memory a plain set, pruned of expired or evicted
+# conversations when it is read. Stale entries (an expired or evicted conversation) are
+# harmless: delete_all skips anything that is gone or belongs to another owner.
 _owner_index: Dict[str, Set[str]] = {}
 
 
@@ -89,7 +90,24 @@ async def _index_members(owner: str) -> List[str]:
             return sorted(await get_redis().smembers(_owner_index_key(_owner_hash(owner))))
         except Exception as e:
             raise StoreError(str(e)) from e
-    return sorted(_owner_index.get(_owner_hash(owner)) or ())
+    owner_hash = _owner_hash(owner)
+    members = _owner_index.get(owner_hash)
+    if not members:
+        return []
+    # In memory, drop IDs whose conversation has since expired or been evicted so the
+    # index cannot grow without bound (issue #121). This only reads the owner's own
+    # conversations, which delete_all would load anyway.
+    live = {
+        conversation_id
+        for conversation_id in members
+        if await _store.get(conversation_id) is not None
+    }
+    if len(live) != len(members):
+        if live:
+            _owner_index[owner_hash] = live
+        else:
+            del _owner_index[owner_hash]
+    return sorted(live)
 
 
 def _limit_history(messages: List[Message]) -> List[Message]:
@@ -166,9 +184,17 @@ async def append(conversation_id: str, owner: str, *messages: Message) -> None:
         return updated
 
     try:
-        await _store.update(conversation_id, mutate)
+        updated = await _store.update(conversation_id, mutate)
     except StoreError as e:
         raise _unavailable(e) from e
+    if updated is not None:
+        # The conversation's own TTL was just refreshed, so re-index it and refresh the
+        # index's expiry too; otherwise a conversation kept alive by continuous messages
+        # would outlive its index entry and be silently skipped by delete_all (#121).
+        try:
+            await _index_add(owner, conversation_id)
+        except StoreError as e:
+            raise _unavailable(e) from e
 
 
 async def delete(conversation_id: str, owner: str) -> bool:

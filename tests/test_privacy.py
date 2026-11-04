@@ -98,6 +98,23 @@ def test_delete_all_never_loads_other_owners_conversations(client, monkeypatch):
     assert loaded == [mine]  # Bob's 30 conversations were never loaded
 
 
+async def test_in_memory_owner_index_prunes_expired_conversations():
+    # The in-memory owner index must not keep IDs of conversations that have since
+    # expired or been evicted, or it would grow without bound (issue #121 review)
+    alice = await conversations.create("key:alice")
+    bob = await conversations.create("key:bob")
+    assert await conversations._index_members("key:bob") == [bob]
+
+    # Drop bob's conversation directly from the store, as if it had expired
+    await conversations._store.delete(bob)
+
+    assert await conversations._index_members("key:bob") == []
+    # The stale ID is no longer held in memory
+    assert conversations._owner_index.get(conversations._owner_hash("key:bob")) in (None, set())
+    # Alice's live conversation is unaffected
+    assert await conversations._index_members("key:alice") == [alice]
+
+
 def test_delete_all_with_no_conversations(client):
     response = client.delete("/v1/chat", headers=ALICE)
 
