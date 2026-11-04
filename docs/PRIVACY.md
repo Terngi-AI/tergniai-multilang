@@ -76,6 +76,12 @@ is shared by every replica and survives restarts, subject to the TTLs above.
 Ownership is the same API-key fingerprint (or IP address) that created the conversation, so
 these endpoints can only delete the caller's own data.
 
+To find the caller's conversations without loading every stored conversation, the server
+keeps a per-owner index that is populated as conversations are created and refreshed as
+they are updated. Conversations created before that index existed are not listed by
+`DELETE /v1/chat`; they are removed by their normal retention (24 hours after the last
+message) instead.
+
 `DELETE /v1/chat` removes conversations from the active store. It does not rewrite Redis
 backups or snapshots, and when several replicas use in-memory storage without Redis, each
 replica only deletes the conversations it holds. Use Redis for a deployment where a single
