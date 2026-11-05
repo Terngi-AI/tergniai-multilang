@@ -37,6 +37,8 @@
       settings: "Ètò",
       apiKeyLabel: "Kọ́kọ́rọ́ API",
       apiKeyPlaceholder: "Kìkì tí olupin bá béèrè fún un",
+      rememberKey: "Rántí ní ẹ́rọ̀ yìí",
+      forgetKey: "Yà kọ́kọ́rọ́ náà",
       welcomeSub: "Bá Terngi AI sọ̀rọ̀ nípa ohunkóhun, ní èdè rẹ.",
       inputPlaceholder: "Firanṣẹ́ sí Terngi AI…",
       inputAriaLabel: "Ifiranṣẹ́",
@@ -48,7 +50,13 @@
       expiredError: "Ìjíròrò yẹn ti parí. Ìfiranṣẹ́ rẹ tí ó kàn yóò bẹ̀rẹ̀ tuntun.",
       genericError: "Nǹkan kan tọsẹ.",
       networkError: "Kò lè dé ọ̀dọ̀ olupin. Yẹ asopọ rẹ wò kí o tún gbìyànjú.",
-      usedTools: "lo"
+      usedTools: "lo",
+      deleteChats: "Pa àwọn ìjíròrò mi",
+      deleteConfirm: "Pa gbogbo ìjíròrò rẹ láti ọ̀dọ̀ olúpìn? A kò lè yí e padà.",
+      deletingChats: "Ó ń pa…",
+      deletedChats: "Àwọn ìjíròrò {n} ti pa.",
+      deletedChatsNone: "Kò sí ìjíròrò tí a fi pamọ́ láti pa.",
+      deleteNeedsKey: "Pa-gbogbo nílò kọ́kọ́rọ́ API. Kọ èwo rẹ ní Ètò."
     },
     ha: {
       uiLangLabel: "Harshen shafi:",
@@ -58,6 +66,8 @@
       settings: "Saituna",
       apiKeyLabel: "Mabuɗin API",
       apiKeyPlaceholder: "Idan har uwar garken na buƙata kawai",
+      rememberKey: "Tuna a wannan na'ura",
+      forgetKey: "Manta mabuɗin",
       welcomeSub: "Yi hira da Terngi AI game da komai, cikin yarenka.",
       inputPlaceholder: "Aika saƙo zuwa Terngi AI…",
       inputAriaLabel: "Saƙo",
@@ -69,7 +79,13 @@
       expiredError: "Waccan hirar ta ƙare. Saƙonku na gaba zai fara sabuwa.",
       genericError: "Wani abu ya sami matsala.",
       networkError: "An kasa isa ga uwar garken. Duba hanyar sadarwarka sannan ka sake gwadawa.",
-      usedTools: "anyi amfani da"
+      usedTools: "anyi amfani da",
+      deleteChats: "Share hirarraki",
+      deleteConfirm: "Shin za a share duk hirarraki daga uwar garken? Ba za a iya mayarwa ba.",
+      deletingChats: "Ana share hirarraki…",
+      deletedChats: "An share hirarraki {n}.",
+      deletedChatsNone: "Babu hirarraki da aka adana don a share.",
+      deleteNeedsKey: "Share duk yana buƙatar Mabuɗin API. Shigar da na ka a Saituna."
     },
     ig: {
       uiLangLabel: "Asụsụ Ihuenyo:",
@@ -79,6 +95,8 @@
       settings: "Ntọala",
       apiKeyLabel: "Igodo API",
       apiKeyPlaceholder: "Naanị ma sava chọrọ ya",
+      rememberKey: "Cheta na ngwa a",
+      forgetKey: "Lata igodo ahụ",
       welcomeSub: "Kparịta ụka na Terngi AI gbasara ihe ọ bụla, n'asụsụ gị.",
       inputPlaceholder: "Ziga ozi na Terngi AI…",
       inputAriaLabel: "Ozi",
@@ -90,7 +108,13 @@
       expiredError: "Mkparịta ụka ahụ agwụla. Ozi ọzọ ị ga-eziga ga-amalite nke ọhụrụ.",
       genericError: "Ihe mebiri.",
       networkError: "Enweghị ike iru sava ahụ. Lelee njikọ gị ma nwaa ọzọ.",
-      usedTools: "jiri"
+      usedTools: "jiri",
+      deleteChats: "Wepụ mkparịta ụka m",
+      deleteConfirm: "Wepụ mkparịta ụka gị niile site na sava? A gaghị enwe ike imeghachi ya.",
+      deletingChats: "Na-ewepụ…",
+      deletedChats: "A wepụrụ mkparịta ụka {n}.",
+      deletedChatsNone: "Enweghị mkparịta ụka echekwara iji wepụ.",
+      deleteNeedsKey: "Iwepu ụ niile chọrọ Igodo API. Tinye nke gị na Ntọala."
     },
     pcm: {
       uiLangLabel: "Language:",
@@ -100,6 +124,8 @@
       settings: "Settings",
       apiKeyLabel: "API key",
       apiKeyPlaceholder: "Only if server need am",
+      rememberKey: "Remba am for dis device",
+      forgetKey: "Forget di key",
       welcomeSub: "Follow Terngi AI yarn about anything, for your own language.",
       inputPlaceholder: "Message Terngi AI…",
       inputAriaLabel: "Message",
@@ -111,7 +137,13 @@
       expiredError: "Dat gist don expire. Your next message go start new one.",
       genericError: "Wahala dey.",
       networkError: "Network no reach server. Check your connection try again.",
-      usedTools: "use"
+      usedTools: "use",
+      deleteChats: "Remove my chat",
+      deleteConfirm: "Remove all your chat from server? You no go fit get am back.",
+      deletingChats: "De remove…",
+      deletedChats: "We don remove {n} chat.",
+      deletedChatsNone: "No chat wey we store.",
+      deleteNeedsKey: "Remove-all dey need API key. Put your own for Settings."
     },
     sw: {
       uiLangLabel: "Lugha:",
@@ -121,6 +153,8 @@
       settings: "Mipangilio",
       apiKeyLabel: "Ufunguo wa API",
       apiKeyPlaceholder: "Ikiwa tu seva inaihitaji",
+      rememberKey: "Kumbuka kwenye kifaa hiki",
+      forgetKey: "Lahumu ufunguo",
       welcomeSub: "Zungumza na Terngi AI kuhusu chochote, katika lugha yako.",
       inputPlaceholder: "Tuma ujumbe kwa Terngi AI…",
       inputAriaLabel: "Ujumbe",
@@ -132,7 +166,13 @@
       expiredError: "Mazungumzo hayo yamekwisha muda wake. Ujumbe wako unaofuata utaanza mapya.",
       genericError: "Hitilafu imetokea.",
       networkError: "Haikuweza kuunganishwa na seva. Angalia mtandao wako kisha ujaribu tena.",
-      usedTools: "imetumia"
+      usedTools: "imetumia",
+      deleteChats: "Futa mazungumzo yangu",
+      deleteConfirm: "Futa mazungumzo yako yote kutoka kwenye seva? Hatuwezi kurudisha hii.",
+      deletingChats: "Ninafuta…",
+      deletedChats: "Imefuta mazungumzo {n}.",
+      deletedChatsNone: "Hakuna mazungumzo yaliyohifadhiwa kufuta.",
+      deleteNeedsKey: "Kufuta yote kunahitaji Ufunguo wa API. Weka ufunguo wako katika Mipangilio."
     }
   };
 
