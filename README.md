@@ -178,6 +178,10 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `MAX_BATCH_SIZE` | no | `25` | Max texts per batch request |
 | `MAX_BATCH_CHARACTERS` | no | `50000` | Max total characters per batch |
 | `MAX_REQUEST_BYTES` | no | `1048576` | Largest request body accepted; bigger requests get `413` |
+| `MODERATION_PROVIDERS` | no | *(disabled)* | LLM providers that serve the prompt-guard classifier; empty disables moderation |
+| `PROMPT_GUARD_MODEL` | no | `meta-llama/llama-prompt-guard-2-86m` | Classifier model for chat/agent moderation; does not need to be listed in a provider's MODELS, and is never tried as a chat fallback |
+| `MODERATION_THRESHOLD` | no | `0.5` | Score at or above which the classifier's probability counts as an injection |
+| `MODERATION_FAIL_MODE` | no | `open` | What happens if the classifier is unreachable: `open` lets the request through, `closed` refuses with `503` |
 | `CORS_ORIGINS` | no | *(disabled)* | Comma-separated allowed origins |
 | `FORWARDED_ALLOW_IPS` | no | `127.0.0.1,::1` | Proxy IPs/CIDRs trusted to set `X-Forwarded-For` |
 | `LOG_LEVEL` | no | `INFO` | Python log level. Upstream error *bodies* are only logged at `DEBUG` (they can echo user text); `INFO` logs the status, error code and request ID |
@@ -191,6 +195,14 @@ each model is tried in order, and keys rotate between requests. A key that is re
 (401/403) or rate-limited (429) is skipped for a while; a model that errors or returns
 unusable output is skipped for that request. The app starts without keys; endpoints with
 no configured provider return `503`.
+
+**Moderation:** when `MODERATION_PROVIDERS` is set, user messages and agent tool results
+are classified before the chat model sees them. Groq answers the classifier with a
+probability score (near 1 = injection), compared against `MODERATION_THRESHOLD`;
+label-based answers ("INJECTION"/"MALICIOUS") from other deployments are matched as a
+fallback. The guard model does not need to be listed in the provider's MODELS and is
+never tried as a chat fallback: a guard verdict is not an answer. Note that Prompt Guard
+2 has a 512-token context, so only the beginning of very long messages is classified.
 
 JSON requests share one `REQUEST_DEADLINE_SECONDS` wall-clock budget and one
 `REQUEST_MAX_UPSTREAM_ATTEMPTS` cap across retries, provider fallbacks and agent steps.
@@ -304,6 +316,7 @@ http_get:
 | `terngi_api_key_upstream_requests_total` | `key` (hash) | Upstream calls per API key |
 | `terngi_api_key_tokens_total` | `key` (hash), `kind` (`prompt`/`completion`) | Provider-reported tokens per API key |
 | `terngi_api_key_quota_exceeded_total` | `key` (hash) | Requests rejected because the key's daily quota was exceeded |
+| `terngi_moderation_flagged_total` | `kind` (`user_message`/`tool_result`) | User messages or tool results flagged by prompt-guard moderation |
 
 `route` is the route template (e.g. `/v1/translate`), or `unmatched` for unknown paths,
 so label values stay bounded. Metrics are per process, like the cache and rate limiter.
