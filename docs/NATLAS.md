@@ -10,9 +10,17 @@ user's language, with no round trip through English.
 
 ## Before you use it
 
-- **The model is gated.** Its Hugging Face page asks for a login and approved access. Read its license
-  and acceptable-use terms there before you serve it, and check the context length its card gives.
-  This page does not repeat them, because they can change.
+- **The model is gated, and its license limits who can use it.** Its
+  [Hugging Face page](https://huggingface.co/NCAIR1/N-ATLaS) asks for a login and approved access. As of
+  2026-11-05 it is under the "Open-Source Research and Innovation License":
+  - Free for research and non-commercial use, **up to 1,000 active users in 30 days**.
+  - Commercial use needs a separate license from Awarri and the Federal Ministry.
+  - Attribution is required ("Powered by Awarri" on renamed versions).
+  - Some uses are prohibited, such as surveillance and disinformation.
+
+  Anyone can deploy this project, so you are the one who has to comply. The terms can change: read the
+  current license and acceptable-use terms on the model page before you serve it, and check the context
+  length its card gives.
 - **You host it.** There is no hosted default: you give Terngi AI the address of a server that runs it.
   An 8B model needs a GPU with enough memory, or a quantised build.
 - **Quality has not been measured.** Nothing here compares its answers with the translation pipeline's
