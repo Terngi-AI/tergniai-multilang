@@ -24,6 +24,24 @@ def _non_empty(text: str) -> str:
     return text
 
 
+def _chat_messages(
+    system: str, content: str, memory_context: Optional[List[Dict[str, Any]]]
+) -> List[Dict[str, str]]:
+    """The system prompt, the remembered turns (only user/assistant ones are allowed) and the message"""
+    messages: List[Dict[str, str]] = [{"role": "system", "content": system}]
+    if memory_context:
+        for message in memory_context:
+            if message.get("role") in ("user", "assistant") and "content" in message:
+                messages.append(
+                    {
+                        "role": message["role"],
+                        "content": normalize_text(message["content"]),
+                    }
+                )
+    messages.append({"role": "user", "content": normalize_text(content)})
+    return messages
+
+
 async def get_response(content: str, memory_context: Optional[List[Dict[str, Any]]] = None) -> str:
     """
     Get a conversational reply (always in English) from the chat providers
@@ -35,24 +53,43 @@ async def get_response(content: str, memory_context: Optional[List[Dict[str, Any
     Returns:
         Reply in English
     """
-    content = normalize_text(content)
-    messages: List[Dict[str, str]] = [{"role": "system", "content": config.SYSTEM_PROMPT}]
-
-    # Add memory context if provided (only user/assistant turns are allowed)
-    if memory_context:
-        for message in memory_context:
-            if message.get("role") in ("user", "assistant") and "content" in message:
-                messages.append(
-                    {
-                        "role": message["role"],
-                        "content": normalize_text(message["content"]),
-                    }
-                )
-
-    messages.append({"role": "user", "content": content})
-
     return await llm.complete(
-        config.CHAT_PROVIDERS, messages, parse=_non_empty, temperature=0.7, max_tokens=1024
+        config.CHAT_PROVIDERS,
+        _chat_messages(config.SYSTEM_PROMPT, content, memory_context),
+        parse=_non_empty,
+        temperature=0.7,
+        max_tokens=1024,
+    )
+
+
+async def get_native_response(
+    content: str,
+    language: str,
+    providers: List[str],
+    memory_context: Optional[List[Dict[str, Any]]] = None,
+) -> str:
+    """
+    Get a conversational reply written directly in `language`, with no translation step
+
+    Args:
+        content: User message, in the user's own language
+        language: Language code the reply is written in
+        providers: Providers that speak that language (see config.NATIVE_CHAT_PROVIDERS)
+        memory_context: Optional conversation history for context
+
+    Returns:
+        Reply in `language`
+    """
+    system = (
+        f"{config.SYSTEM_PROMPT}\n"
+        f"Always reply in {_language_name(language)}, whatever language the user writes in."
+    )
+    return await llm.complete(
+        providers,
+        _chat_messages(system, content, memory_context),
+        parse=_non_empty,
+        temperature=0.7,
+        max_tokens=1024,
     )
 
 

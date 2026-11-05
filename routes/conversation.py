@@ -6,14 +6,36 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
+import config
 from models import ConversationRequest, ConversationResponse
-from services.assistant import get_response
+from services import llm
+from services.assistant import get_native_response, get_response
 from services.languages import resolve_source_language, validate_language
 from services.translator import translate_text
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["conversation"])
+
+
+def _native_providers(from_language: str, to_language: str) -> list:
+    """
+    The providers in NATIVE_CHAT_PROVIDERS that can take this conversation as it is
+
+    A provider must be usable now and list its languages explicitly, both of them among
+    them: one with no list means "any language", which is not a promise to speak this one.
+    """
+    names = []
+    for name in config.NATIVE_CHAT_PROVIDERS:
+        provider = config.LLM_PROVIDERS.get(name)
+        if (
+            provider is not None
+            and provider.languages is not None
+            and provider.supports(from_language, to_language)
+            and llm.is_available(name)
+        ):
+            names.append(name)
+    return names
 
 
 @router.post("/v1/converse", response_model=ConversationResponse)
@@ -26,11 +48,41 @@ async def converse(request: ConversationRequest):
     - Nigerian language to English: Translate input to English, get English response from Groq, keep in English
     - Nigerian language to Nigerian language: Translate input to English, get English response from Groq, translate to target language
     - from_language "auto": detect the source language first, then follow the flow above
+
+    With NATIVE_CHAT_PROVIDERS set, a provider that speaks both languages answers directly in the
+    target language instead (no translation to English and back); if it fails, the flows above run.
     """
     validate_language(request.to_language, "Target")
 
     try:
         from_language = await resolve_source_language(request.content, request.from_language)
+
+        memory_context = (
+            [message.model_dump() for message in request.memory_context]
+            if request.memory_context
+            else None
+        )
+
+        native = _native_providers(from_language, request.to_language)
+        if native:
+            try:
+                native_response = await get_native_response(
+                    request.content, request.to_language, native, memory_context
+                )
+            except HTTPException as e:
+                logger.warning(
+                    "Native chat failed (%s); using the translation pipeline", e.status_code
+                )
+            else:
+                return ConversationResponse(
+                    translated_text=await translate_text(
+                        request.content, from_language, request.to_language
+                    ),
+                    from_language=from_language,
+                    to_language=request.to_language,
+                    original_text=request.content,
+                    response=native_response,
+                )
 
         # Content to pass to Groq (will be in English)
         groq_input = ""
@@ -48,11 +100,6 @@ async def converse(request: ConversationRequest):
             )
 
         # Step 2: Get response from Groq (always in English)
-        memory_context = (
-            [message.model_dump() for message in request.memory_context]
-            if request.memory_context
-            else None
-        )
         groq_response = await get_response(groq_input, memory_context)
 
         # Step 3: Prepare final response based on target language

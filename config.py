@@ -136,6 +136,9 @@ SUPPORTED_LANGUAGES = {
     **ASIAN_LANGUAGES,
 }
 
+# Languages N-ATLaS (NCAIR and Awarri's Llama-3 8B fine-tune) is built for
+NATLAS_LANGUAGES = frozenset(["en", "ha", "ig", "yo"])
+
 # Languages MORENA was trained on; it is only used for these
 MORENA_LANGUAGES = frozenset(
     ["en", "fr", "yo", "ha", "ig", "pcm", "sw", "rw", "sn", "zu", "xh", "tn", "af", "nr"]
@@ -200,6 +203,8 @@ PROVIDER_PRESETS: Dict[str, Tuple[str, str, str, bool]] = {
     "openai": ("openai", "https://api.openai.com/v1", "", True),
     "ollama": ("openai", "http://localhost:11434/v1", "", False),
     "morena": ("morena", "http://localhost:8080", "morena-1.5b-instruct", False),
+    # No base URL: N-ATLaS is self-hosted (vLLM, TGI) or on an endpoint of your own; set NATLAS_BASE_URL
+    "natlas": ("openai", "", "NCAIR1/N-ATLaS", False),
 }
 
 
@@ -222,7 +227,15 @@ def _load_provider(name: str) -> LLMProvider:
         models=tuple(_unique(models)),
         requires_key=requires_key,
         languages=(
-            frozenset(languages) if languages else (MORENA_LANGUAGES if kind == "morena" else None)
+            frozenset(languages)
+            if languages
+            else (
+                MORENA_LANGUAGES
+                if kind == "morena"
+                else NATLAS_LANGUAGES
+                if name == "natlas"
+                else None
+            )
         ),
     )
 
@@ -235,6 +248,11 @@ LLM_PROVIDERS: Dict[str, LLMProvider] = {
 # Which providers handle each task, tried in order ("azure" or an LLM provider name).
 # MORENA is not used for language detection by default.
 CHAT_PROVIDERS = _env_list("CHAT_PROVIDERS") or list(LLM_PROVIDERS)
+
+# LLM providers that answer in the user's own language. For the languages such a provider lists,
+# /v1/converse asks it directly instead of translating to English, asking an English model and
+# translating back. Off unless set, e.g. NATIVE_CHAT_PROVIDERS=natlas. See docs/NATLAS.md
+NATIVE_CHAT_PROVIDERS = _env_list("NATIVE_CHAT_PROVIDERS")
 TRANSLATION_PROVIDERS = _env_list("TRANSLATION_PROVIDERS") or ["azure", *LLM_PROVIDERS]
 DETECTION_PROVIDERS = _env_list("DETECTION_PROVIDERS") or [
     "azure",
