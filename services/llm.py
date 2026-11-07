@@ -18,6 +18,7 @@ import config
 import metrics
 from config import LLMProvider
 from services import deadline, usage
+from services.http import get_http_client
 from services.keypool import key_pool, mask, retry_after_seconds
 from services.retry import RETRY_STATUS_CODES, error_summary, retry_delay
 
@@ -87,47 +88,44 @@ def render_morena_prompt(messages: List[Message]) -> str:
 
 
 async def _post(url: str, headers: Dict[str, str], body: Dict[str, Any]) -> httpx.Response:
-    """
-    POST with exponential-backoff retries for transient 5xx and connection errors.
+    """POST with exponential-backoff retries for transient 5xx and connection errors.
     429s are returned as-is: they are handled by rotating keys and models instead.
     """
+    client = await get_http_client()
     attempt = 0
-    async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
-        while True:
-            deadline.consume_attempt()
-            try:
-                response = await client.post(
-                    url,
-                    headers=headers,
-                    json=body,
-                    timeout=deadline.timeout(config.REQUEST_TIMEOUT),
-                )
-            except httpx.HTTPError as e:
-                delay = retry_delay(attempt, None) if isinstance(e, httpx.TransportError) else None
-                if delay is None or attempt >= config.UPSTREAM_MAX_RETRIES:
-                    raise _ModelFailed(
-                        f"connection error: {type(e).__name__}", unreachable=True
-                    ) from e
-                reason = type(e).__name__
-            else:
-                status = response.status_code
-                if status == 429 or status not in RETRY_STATUS_CODES:
-                    return response
-                delay = retry_delay(attempt, response)
-                if delay is None or attempt >= config.UPSTREAM_MAX_RETRIES:
-                    return response
-                reason = str(status)
-
-            attempt += 1
-            logger.warning(
-                "%s %s, retrying in %.2fs (retry %d/%d)",
+    while True:
+        deadline.consume_attempt()
+        try:
+            response = await client.post(
                 url,
-                reason,
-                delay,
-                attempt,
-                config.UPSTREAM_MAX_RETRIES,
+                headers=headers,
+                json=body,
+                timeout=deadline.timeout(config.REQUEST_TIMEOUT),
             )
-            await deadline.sleep(delay)
+        except httpx.HTTPError as e:
+            delay = retry_delay(attempt, None) if isinstance(e, httpx.TransportError) else None
+            if delay is None or attempt >= config.UPSTREAM_MAX_RETRIES:
+                raise _ModelFailed(f"connection error: {type(e).__name__}", unreachable=True) from e
+            reason = type(e).__name__
+        else:
+            status = response.status_code
+            if status == 429 or status not in RETRY_STATUS_CODES:
+                return response
+            delay = retry_delay(attempt, response)
+            if delay is None or attempt >= config.UPSTREAM_MAX_RETRIES:
+                return response
+            reason = str(status)
+
+        attempt += 1
+        logger.warning(
+            "%s %s, retrying in %.2fs (retry %d/%d)",
+            url,
+            reason,
+            delay,
+            attempt,
+            config.UPSTREAM_MAX_RETRIES,
+        )
+        await deadline.sleep(delay)
 
 
 def _check_status(response: httpx.Response, provider: str, key: Optional[str]) -> None:
