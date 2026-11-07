@@ -339,6 +339,7 @@ async def complete_message(
     temperature: float = 0.7,
     max_tokens: Optional[int] = None,
     on_token: Optional[OnToken] = None,
+    model: Optional[str] = None,
 ) -> T:
     """
     Like `complete`, but `parse` receives the whole assistant message (including any
@@ -347,12 +348,18 @@ async def complete_message(
     With `on_token`, the response is streamed and each piece of text is passed to it as it
     arrives. Fallback to another model or provider only happens before the first token;
     after that a failure is final, so the caller never receives text from two models.
+
+    With `model`, only that model name is tried (across the given providers). This is how
+    the classifier (Prompt Guard) is called: it does not need to be listed in the
+    provider's MODELS, and the chat path (`model=None`) never tries it as a fallback,
+    even if it is listed, because a guard verdict is not an answer.
     """
     providers = [
         provider
         for name in provider_names
         if (provider := config.LLM_PROVIDERS.get(name)) is not None
         and provider.configured
+        and (model is None or model in provider.models or model == config.PROMPT_GUARD_MODEL)
         and (not tools or provider.kind == "openai")
         and (on_token is None or provider.kind == "openai")
     ]
@@ -384,14 +391,25 @@ async def complete_message(
             if not provider.api_keys:
                 keys = [None]
 
-            for model in provider.models:
+            # An explicitly requested model is tried as-is (the classifier may not be
+            # listed in MODELS). Chat (model=None) skips the classifier even when it is
+            # listed: falling back to it would return a guard verdict as the reply.
+            candidate_models: Tuple[str, ...]
+            if model is not None:
+                candidate_models = (model,)
+            else:
+                candidate_models = tuple(
+                    m for m in provider.models if m != config.PROMPT_GUARD_MODEL
+                )
+
+            for provider_model in candidate_models:
                 if not key_pool.available(_provider_slot(name)):
                     break
-                if (name, model) in failed:
+                if (name, provider_model) in failed:
                     continue
                 for key in keys:
-                    if key and not key_pool.available(key, model):
-                        wait = key_pool.wait_time(key, model)
+                    if key and not key_pool.available(key, provider_model):
+                        wait = key_pool.wait_time(key, provider_model)
                         soonest = wait if soonest is None else min(soonest, wait)
                         continue
                     deadline.check()
@@ -399,7 +417,7 @@ async def complete_message(
                         with metrics.track_upstream(name):
                             message = await _call(
                                 provider,
-                                model,
+                                provider_model,
                                 key,
                                 messages,
                                 json_mode,
@@ -410,15 +428,18 @@ async def complete_message(
                             )
                     except (_KeyFailed, _ModelFailed) as e:
                         if emitted:
-                            logger.warning("%s/%s failed mid-stream (%s)", name, model, e)
+                            logger.warning("%s/%s failed mid-stream (%s)", name, provider_model, e)
                             raise HTTPException(
                                 status_code=502, detail="Language model stream was interrupted"
                             ) from e
                         if isinstance(e, _ModelFailed):
                             logger.warning(
-                                "%s/%s failed (%s); trying the next model", name, model, e
+                                "%s/%s failed (%s); trying the next model",
+                                name,
+                                provider_model,
+                                e,
                             )
-                            failed.add((name, model))
+                            failed.add((name, provider_model))
                             if e.unreachable:
                                 logger.warning(
                                     "%s is unreachable; skipping it for %.0fs",
@@ -431,7 +452,9 @@ async def complete_message(
                             break
 
                         if key:
-                            key_pool.cool_down(key, e.cooldown, model if e.per_model else None)
+                            key_pool.cool_down(
+                                key, e.cooldown, provider_model if e.per_model else None
+                            )
                         if e.per_model:
                             soonest = e.cooldown if soonest is None else min(soonest, e.cooldown)
                         continue
@@ -443,8 +466,10 @@ async def complete_message(
                             raise HTTPException(
                                 status_code=502, detail="Language model returned unusable output"
                             ) from e
-                        logger.warning("%s/%s returned unusable output (%s)", name, model, e)
-                        failed.add((name, model))
+                        logger.warning(
+                            "%s/%s returned unusable output (%s)", name, provider_model, e
+                        )
+                        failed.add((name, provider_model))
                         break
 
         # Everything left is rate-limited: wait briefly if a slot frees up soon enough

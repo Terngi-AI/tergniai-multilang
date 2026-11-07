@@ -17,7 +17,8 @@ server of your own. All three options below use the repository's `Dockerfile`.
    for translation and language detection. Without Azure, add an LLM provider to
    `TRANSLATION_PROVIDERS`.
 3. Generate a long random value for `API_KEYS`. Clients send it in the `X-API-Key`
-   header. Never reuse a production key for a public demo.
+   header. Never reuse a production key for a public demo. If `API_KEYS` is empty, the
+   app **refuses to start** unless `ALLOW_UNAUTHENTICATED=true` (local development only).
 4. Do not commit `.env` or put keys in the Dockerfile. Set them as host secrets.
 
 The minimum configuration for a demo is:
@@ -26,6 +27,7 @@ The minimum configuration for a demo is:
 GROQ_API_KEYS=gsk_...
 LLM_PROVIDERS=groq
 API_KEYS=<long-random-demo-key>
+HASH_SECRET=<64-char-random-hex>
 RATE_LIMIT_PER_MINUTE=30
 RATE_LIMIT_MAX_WAIT_SECONDS=0
 MAX_CONTENT_LENGTH=2000
@@ -70,7 +72,7 @@ instance.
 
 4. Set **Health Check Path** to `/health`.
 5. Add the environment variables from [Before you deploy](#before-you-deploy) under
-   **Environment**. Add `GROQ_API_KEYS` and `API_KEYS` as secrets.
+   **Environment**. Add `GROQ_API_KEYS`, `API_KEYS`, and `HASH_SECRET` as secrets.
 6. Deploy, then check:
 
    ```bash
@@ -147,7 +149,7 @@ have access, this is the best free-hardware option for running MORENA next to th
 
 5. In the Space's **Settings → Variables and secrets**, add the variables from
    [Before you deploy](#before-you-deploy). Use **secrets** for `GROQ_API_KEYS`,
-   `AZURE_TRANSLATOR_KEYS`, and `API_KEYS`.
+   `AZURE_TRANSLATOR_KEYS`, `API_KEYS`, and `HASH_SECRET`.
 6. Wait for the build, then open `https://YOUR_USER-YOUR_SPACE.hf.space/chat`.
 
 ### Hugging Face limits
@@ -210,7 +212,7 @@ Set `internal_port = 8000` in the generated `fly.toml`:
 Then set secrets and deploy:
 
 ```bash
-fly secrets set GROQ_API_KEYS=gsk_... API_KEYS=<long-random-demo-key>
+fly secrets set GROQ_API_KEYS=gsk_... API_KEYS=<long-random-demo-key> HASH_SECRET=<64-char-random-hex>
 fly deploy
 ```
 
@@ -221,7 +223,9 @@ smallest machine; use a machine with at least 1 GB of RAM or a separate service.
 ## Protect a public demo
 
 - **Always set `API_KEYS`** for a public deployment. Without it, anyone who finds the URL
-  can spend your provider quota.
+  can spend your provider quota. The app refuses to start with `API_KEYS` empty unless
+  `ALLOW_UNAUTHENTICATED=true`, and then logs a warning at startup that authentication
+  is disabled.
 - Use a dedicated demo key. Rotate it if it leaks, and keep production keys separate.
 - Keep the request limits small (`MAX_CONTENT_LENGTH`, `MAX_BATCH_SIZE`,
   `MAX_BATCH_CHARACTERS`, `MAX_REQUEST_BYTES`).

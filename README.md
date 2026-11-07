@@ -75,8 +75,11 @@ cd tergniai-multilang
 python -m venv .venv && source .venv/bin/activate
 pip install --require-hashes -r requirements-dev.lock
 
-cp .env.example .env   # then fill in your keys
+cp .env.example .env   # then fill in your keys, and set API_KEYS
+# Required: a secret for hashing phone numbers and IPs
+python -c "import secrets; print('HASH_SECRET=' + secrets.token_hex(32))" >> .env
 uvicorn main:app --reload
+# For a quick local try without keys: ALLOW_UNAUTHENTICATED=true uvicorn main:app --reload
 ```
 
 Open **http://localhost:8000/chat** to chat in your browser, or
@@ -164,6 +167,8 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `USAGE_TTL_SECONDS` | no | `172800` | How long per-key usage counters are kept (two days) |
 | `USAGE_MAX_ITEMS` | no | `10000` | Maximum per-key usage entries kept |
 | `METRICS_TOKEN` | no | *(off)* | Optional dedicated bearer token for `/metrics` (`Authorization: Bearer ...`), so the monitoring stack needs no API key |
+| `HASH_SECRET` | **yes** | - | Keying secret (HMAC-SHA256) for personal identifiers: WhatsApp phone numbers and IP-based conversation owners. The app refuses to start without it; generate one with `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `ALLOW_UNAUTHENTICATED` | no | `false` | Permit startup with `API_KEYS` empty (local development only; the app refuses to start otherwise) |
 | `WHATSAPP_*` | no | *(off)* | WhatsApp bot settings, see [docs/WHATSAPP.md](docs/WHATSAPP.md) |
 | `RATE_LIMIT_PER_MINUTE` | no | `60` | Requests per minute per client; `0` disables |
 | `AUTH_FAILURES_PER_MINUTE` | no | `10` | Failed API-key attempts allowed per IP per minute; `0` disables |
@@ -173,6 +178,10 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `MAX_BATCH_SIZE` | no | `25` | Max texts per batch request |
 | `MAX_BATCH_CHARACTERS` | no | `50000` | Max total characters per batch |
 | `MAX_REQUEST_BYTES` | no | `1048576` | Largest request body accepted; bigger requests get `413` |
+| `MODERATION_PROVIDERS` | no | *(disabled)* | LLM providers that serve the prompt-guard classifier; empty disables moderation |
+| `PROMPT_GUARD_MODEL` | no | `meta-llama/llama-prompt-guard-2-86m` | Classifier model for chat/agent moderation; does not need to be listed in a provider's MODELS, and is never tried as a chat fallback |
+| `MODERATION_THRESHOLD` | no | `0.5` | Score at or above which the classifier's probability counts as an injection |
+| `MODERATION_FAIL_MODE` | no | `open` | What happens if the classifier is unreachable: `open` lets the request through, `closed` refuses with `503` |
 | `CORS_ORIGINS` | no | *(disabled)* | Comma-separated allowed origins |
 | `FORWARDED_ALLOW_IPS` | no | `127.0.0.1,::1` | Proxy IPs/CIDRs trusted to set `X-Forwarded-For` |
 | `LOG_LEVEL` | no | `INFO` | Python log level. Upstream error *bodies* are only logged at `DEBUG` (they can echo user text); `INFO` logs the status, error code and request ID |
@@ -186,6 +195,14 @@ each model is tried in order, and keys rotate between requests. A key that is re
 (401/403) or rate-limited (429) is skipped for a while; a model that errors or returns
 unusable output is skipped for that request. The app starts without keys; endpoints with
 no configured provider return `503`.
+
+**Moderation:** when `MODERATION_PROVIDERS` is set, user messages and agent tool results
+are classified before the chat model sees them. Groq answers the classifier with a
+probability score (near 1 = injection), compared against `MODERATION_THRESHOLD`;
+label-based answers ("INJECTION"/"MALICIOUS") from other deployments are matched as a
+fallback. The guard model does not need to be listed in the provider's MODELS and is
+never tried as a chat fallback: a guard verdict is not an answer. Note that Prompt Guard
+2 has a 512-token context, so only the beginning of very long messages is classified.
 
 JSON requests share one `REQUEST_DEADLINE_SECONDS` wall-clock budget and one
 `REQUEST_MAX_UPSTREAM_ATTEMPTS` cap across retries, provider fallbacks and agent steps.
@@ -241,6 +258,12 @@ only through the proxy.
 
 ### Authentication & rate limits
 
+> **Upgrading:** the app now refuses to start in two cases. Set both before upgrading:
+> - `API_KEYS` empty, because every endpoint would be public. Set `API_KEYS`, or
+>   `ALLOW_UNAUTHENTICATED=true` for local development only.
+> - `HASH_SECRET` empty. Stored WhatsApp memory and chat ownership are keyed with it,
+>   so existing ones are forgotten once, which is safe because they expire anyway.
+
 When `API_KEYS` is set, every `/v1/*` endpoint except `/v1/languages` requires an
 `X-API-Key` header. Each client (API key, or IP address when no key is sent) may make
 `RATE_LIMIT_PER_MINUTE` requests per minute. Responses include `X-RateLimit-Limit` and
@@ -293,6 +316,7 @@ http_get:
 | `terngi_api_key_upstream_requests_total` | `key` (hash) | Upstream calls per API key |
 | `terngi_api_key_tokens_total` | `key` (hash), `kind` (`prompt`/`completion`) | Provider-reported tokens per API key |
 | `terngi_api_key_quota_exceeded_total` | `key` (hash) | Requests rejected because the key's daily quota was exceeded |
+| `terngi_moderation_flagged_total` | `kind` (`user_message`/`tool_result`) | User messages or tool results flagged by prompt-guard moderation |
 
 `route` is the route template (e.g. `/v1/translate`), or `unmatched` for unknown paths,
 so label values stay bounded. Metrics are per process, like the cache and rate limiter.

@@ -25,8 +25,9 @@ env:
   OSV_SCANNER_IMAGE: ghcr.io/google/osv-scanner:v2.7.0@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0
   TRIVY_IMAGE: aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222
   ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:2.17.0@sha256:5ccfff9a411743ab2615136a2edd7416bec9ce41572fa94e935df38c14adb2b6
-  # Pinned to the version `stable` points to (1.5.4), by digest; the image ships current
-  # virus signatures at build time, so bump the version+digest regularly per CONTRIBUTING.md
+  # Pinned to the version `stable` points to (1.5.4), by digest. The malware job runs
+  # freshclam before scanning, so the virus signatures stay current; bump only for new
+  # ClamAV releases (see CONTRIBUTING.md)
   CLAMAV_IMAGE: clamav/clamav:1.5.4@sha256:e19130cdebaeacc71fa46eab3ed6f69941f2f22aa5e08d55e9197f8edf43ce5e
 
 jobs:
@@ -39,11 +40,38 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0 # scan the full history a PR brings in, not just the tip
+      - name: Refresh the image's virus signatures
+        id: freshclam
+        run: |
+          # The digest pin keeps the image supply-chain safe, but the signature databases
+          # inside it freeze at that build date. Refresh them into a Docker volume that
+          # the scan step mounts, so the scan uses the signatures of this run. The
+          # volume starts empty, which makes freshclam download the full databases. If
+          # ClamAV's update servers rate-limit the runner, keep the bundled signatures
+          # and warn.
+          docker volume create clamdb
+          if docker run --rm -v clamdb:/var/lib/clamav "$CLAMAV_IMAGE" sh -c \
+              'freshclam --stdout && ls -l /var/lib/clamav/*.cvd'; then
+            echo "refreshed=true" >> "$GITHUB_OUTPUT"
+            echo "Signatures refreshed into the shared volume for this run"
+          else
+            echo "refreshed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::freshclam failed (rate-limited?); scanning with the signatures bundled in the pinned image"
+          fi
       - name: Scan every file for viruses and malware
         run: |
-          docker run --rm -v "$PWD:/scan:ro" "$CLAMAV_IMAGE" \
-            clamscan --recursive --infected --alert-encrypted=yes --scan-archive=yes \
-            --max-filesize=200M --max-scansize=500M /scan
+          # Mount the refreshed signatures when the refresh succeeded, otherwise fall
+          # back to the signatures bundled in the pinned image. clamscan --version
+          # prints the signature version this scan used (the daily.cvd number changes
+          # as the signatures are updated).
+          VOLUME_ARGS=()
+          if [ "${{ steps.freshclam.outputs.refreshed }}" = "true" ]; then
+            VOLUME_ARGS=(-v clamdb:/var/lib/clamav)
+          fi
+          docker run --rm "${VOLUME_ARGS[@]}" -v "$PWD:/scan:ro" "$CLAMAV_IMAGE" \
+            sh -c 'clamscan --version && clamscan --recursive --infected \
+            --alert-encrypted=yes --scan-archive=yes --max-filesize=200M \
+            --max-scansize=500M /scan'
 
   sast:
     name: Code security scan (Semgrep)
@@ -117,7 +145,9 @@ jobs:
           docker build -t terngi-ai:scan .
           # No provider keys: the scan never reaches paid upstream APIs.
           # Rate limiting is off so the scanner's requests aren't all rejected with 429.
-          docker run -d --name api -p 8000:8000 -e RATE_LIMIT_PER_MINUTE=0 terngi-ai:scan
+          # Auth is off so the scanner reaches every endpoint, not just the 401 handler.
+          docker run -d --name api -p 8000:8000 -e RATE_LIMIT_PER_MINUTE=0 \
+            -e ALLOW_UNAUTHENTICATED=true -e HASH_SECRET=ci-test-hash-secret terngi-ai:scan
           for i in $(seq 1 30); do curl -fsS http://localhost:8000/health && exit 0; sleep 1; done
           docker logs api
           exit 1

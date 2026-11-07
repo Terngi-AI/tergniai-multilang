@@ -312,7 +312,7 @@ def test_request_id_is_generated_and_echoed(client):
 def test_malformed_or_oversized_request_ids_are_replaced(client):
     # A 129-char ID and IDs with spaces / newlines are rejected (a real client can
     # also send non-ASCII or empty values; the regex rejects those too)
-    for bad in ["a" * 129, "has space", "log\ninjection: x", ""]:
+    for bad in ["a" * 129, "has space", "log\ninjection: x", "abc\n", ""]:
         response = client.get("/health", headers={"X-Request-ID": bad})
         echoed = response.headers["X-Request-ID"]
         assert echoed != bad
@@ -349,6 +349,23 @@ def test_ready_when_configured(client, monkeypatch):
         "llm": True,
         "agent": True,
         "storage": True,
+        "auth": True,
+    }
+
+
+def test_ready_shows_service_details_when_auth_is_off(client):
+    # No API keys configured: nothing is protected, so the details are shown to
+    # everyone (and auth is reported off, but readiness stays "ready")
+    response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
+    assert response.json()["services"] == {
+        "translator": True,
+        "llm": True,
+        "agent": True,
+        "storage": True,
+        "auth": False,
     }
 
 

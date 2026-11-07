@@ -18,8 +18,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("UPSTREAM_RETRY_BASE_DELAY", "0")
 # Never read a developer's local .env during tests
 os.environ["ENV_FILE"] = os.devnull
+# The test suite leaves API_KEYS empty by default; local development is the only
+# context where unauthenticated startup is allowed.
+os.environ.setdefault("ALLOW_UNAUTHENTICATED", "true")
 os.environ.setdefault("AZURE_TRANSLATOR_KEY", "test-azure-key")
 os.environ.setdefault("GROQ_API_KEY", "test-groq-key")
+# Keying secret for personal identifiers; the app refuses to start without it
+os.environ.setdefault("HASH_SECRET", "test-hash-secret")
 
 from main import app  # noqa: E402
 
@@ -44,6 +49,8 @@ def reset_state(monkeypatch):
     from services import conversations, usage, whatsapp
     from services.keypool import key_pool
     from services.translator import translation_cache
+
+    monkeypatch.setattr(config, "ALLOW_UNAUTHENTICATED", True)
 
     monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", ["test-azure-key"])
     monkeypatch.setattr(

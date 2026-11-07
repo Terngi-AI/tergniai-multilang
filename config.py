@@ -253,6 +253,24 @@ AGENT_MAX_STEPS = int(os.getenv("AGENT_MAX_STEPS", "6"))
 # AGENT_MAX_STEPS calls, this bounds the cost and duration of a single agent request.
 AGENT_MAX_TOKENS = int(os.getenv("AGENT_MAX_TOKENS", "1500"))
 
+# Optional prompt-injection moderation for chat and agent (issue #38). Leave
+# MODERATION_PROVIDERS empty to disable it entirely (no extra latency). Providers are LLM
+# provider names that serve the prompt-guard classifier (e.g. Groq's
+# meta-llama/llama-prompt-guard-2-86m). MODERATION_FAIL_MODE controls what happens when the
+# classifier cannot be reached: "open" lets the request through, "closed" refuses it.
+MODERATION_PROVIDERS = _env_list("MODERATION_PROVIDERS")
+PROMPT_GUARD_MODEL = os.getenv("PROMPT_GUARD_MODEL", "meta-llama/llama-prompt-guard-2-86m")
+# Groq answers Prompt Guard 2 with a probability score (e.g. "0.9876"); a score at or
+# above this threshold counts as an injection. Label-based answers (PG1 style) are
+# matched separately, so self-hosted deployments keep working.
+MODERATION_THRESHOLD = float(os.getenv("MODERATION_THRESHOLD", "0.5"))
+MODERATION_FAIL_MODE = os.getenv("MODERATION_FAIL_MODE", "open").strip().lower()
+if MODERATION_FAIL_MODE not in ("open", "closed"):
+    logging.getLogger(__name__).warning(
+        "Unknown MODERATION_FAIL_MODE %r; using 'open'", MODERATION_FAIL_MODE
+    )
+    MODERATION_FAIL_MODE = "open"
+
 # Shared storage. With REDIS_URL set (e.g. redis://localhost:6379/0), the translation cache,
 # rate limits and chat conversations are shared by every replica and survive restarts.
 # Without it they live in each process's memory.
@@ -371,6 +389,16 @@ if CACHE_SCOPE not in ("global", "key"):
 # /metrics accepts "Authorization: Bearer <METRICS_TOKEN>" in place of an API key,
 # so the monitoring stack does not need (or leak) a key that can call the API.
 METRICS_TOKEN = os.getenv("METRICS_TOKEN", "")
+
+# Allows starting with API_KEYS empty (only for local development). In production,
+# leaving auth disabled is refused at startup (see main.check_authentication).
+ALLOW_UNAUTHENTICATED = os.getenv("ALLOW_UNAUTHENTICATED", "false").strip().lower() == "true"
+
+# Keying secret for personal identifiers (HMAC-SHA256): WhatsApp phone numbers and
+# IP-based conversation owners. Required — the app refuses to start without it, because
+# a plain unsalted hash of a phone number or an IP can be reversed by brute force.
+# Generate one with: python -c "import secrets; print(secrets.token_hex(32))"
+HASH_SECRET = os.getenv("HASH_SECRET", "")
 
 # Requests per minute allowed per client (API key or IP). 0 disables rate limiting.
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))

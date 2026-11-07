@@ -16,7 +16,21 @@ Thanks for helping! This guide explains how to propose changes.
 - Add support for another language.
 - Improve docs and tests.
 
-For larger changes, open an issue first so we can agree on the approach before you write code.
+## Claim an issue before you start
+
+Every pull request from outside the maintainer team must fix an issue that is **assigned to
+you**. This stops two people from working on the same thing, and keeps
+`good first issue` tasks open for newcomers.
+
+1. Find an issue, or open one and agree the approach with a maintainer.
+2. Comment on the issue that you'd like to work on it.
+3. **Wait until a maintainer assigns it to you** before you write code.
+4. Open your PR with `Closes #<issue>` in the description.
+
+Please claim one issue at a time, and open your next PR once the previous one is merged.
+An automatic check fails PRs that don't link an issue assigned to their author. Once
+you've been assigned, edit the PR description to re-run it. PRs opened for issues
+someone else is assigned to may be closed.
 
 ## Development setup
 
@@ -76,6 +90,7 @@ maintainer must approve.
 
 ## Pull request checklist
 
+- The PR links an issue that is assigned to you (`Closes #123`).
 - CI is green (lint, types, tests on Python 3.11–3.13, Docker build, security scans).
 - Coverage stays at or above 85%.
 - New behaviour is documented in `README.md`.
@@ -124,11 +139,14 @@ This project doesn't use Dependabot, so dependencies are updated by hand:
     **versioned** build tag (`ghcr.io/ggml-org/llama.cpp:server-b<build>`) because the plain
     `server` tag moves on every upstream build;
   - `.github/workflows/security.yml` — the scanner images (OSV-Scanner, Trivy, ZAP, ClamAV;
-    ClamAV is pinned to the version its moving `stable` tag points to, since each release
-    ships fresh virus signatures), and `.github/workflows/ci.yml` — gitleaks.
+    ClamAV is pinned to the version its moving `stable` tag points to), and
+    `.github/workflows/ci.yml` — gitleaks.
 
   Bump them about once a month, or sooner after a security advisory, in one commit that
-  changes the tag **and** the digest together. Look up a tag's digest with:
+  changes the tag **and** the digest together. The ClamAV pin is the exception to the
+  regular cadence: the malware job refreshes the virus signatures with `freshclam` before
+  every scan, so its digest only needs bumping when a new ClamAV release ships. Look up a
+  tag's digest with:
 
   ```bash
   docker buildx imagetools inspect python:3.12-slim
