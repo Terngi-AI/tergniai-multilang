@@ -4,6 +4,7 @@ Main application entry point for Terngi Translation API
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from typing import Dict
 
 import uvicorn
@@ -11,12 +12,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from contextlib import asynccontextmanager
-from services.http import init_http_client, close_http_client
-
-
 from starlette.exceptions import HTTPException as StarletteHTTPException
-
 
 import metrics
 import middleware
@@ -24,12 +20,14 @@ from config import CORS_ORIGINS, MAX_REQUEST_BYTES
 
 # Import routers
 from routes import agent, base, chat, conversation, feedback, translation, whatsapp
+from services.http import close_http_client, init_http_client
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

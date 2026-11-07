@@ -7,7 +7,10 @@ import sys
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
+
+from services.http import close_http_client
 
 # Make the project root importable and provide dummy credentials
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -80,8 +83,6 @@ def reset_state(monkeypatch):
     whatsapp.clear()
     usage.usage_store.clear()
     usage.begin(None)
-import pytest_asyncio
-from services.http import close_http_client
 
 
 @pytest_asyncio.fixture(autouse=True)

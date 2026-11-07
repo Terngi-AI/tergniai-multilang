@@ -6,19 +6,19 @@ then that provider's keys in rotation. A key that is rejected (401/403) or rate-
 (429) is put on cooldown; a model that errors or returns unusable output is skipped.
 """
 
-import asyncio
 import json
 import logging
 import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Set, Tuple, TypeVar
-from services.http import get_http_client
+
 import httpx
 from fastapi import HTTPException
-from services import deadline
+
 import config
 import metrics
 from config import LLMProvider
 from services import deadline, usage
+from services.http import get_http_client
 from services.keypool import key_pool, mask, retry_after_seconds
 from services.retry import RETRY_STATUS_CODES, error_summary, retry_delay
 
@@ -105,9 +105,7 @@ async def _post(url: str, headers: Dict[str, str], body: Dict[str, Any]) -> http
         except httpx.HTTPError as e:
             delay = retry_delay(attempt, None) if isinstance(e, httpx.TransportError) else None
             if delay is None or attempt >= config.UPSTREAM_MAX_RETRIES:
-                raise _ModelFailed(
-                    f"connection error: {type(e).__name__}", unreachable=True
-                ) from e
+                raise _ModelFailed(f"connection error: {type(e).__name__}", unreachable=True) from e
             reason = type(e).__name__
         else:
             status = response.status_code

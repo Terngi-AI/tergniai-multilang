@@ -1,5 +1,7 @@
 from typing import Optional
+
 import httpx
+
 from config import REQUEST_TIMEOUT  # या जहाँ से REQUEST_TIMEOUT इम्पोर्ट होता है
 
 # प्रोसेस-लेवल शेयर्ड क्लाइंट
@@ -11,7 +13,7 @@ MAX_KEEPALIVE_CONNECTIONS = 20
 
 
 async def get_http_client() -> httpx.AsyncClient:
-    
+
     global _client
     if _client is None or _client.is_closed:
         limits = httpx.Limits(
@@ -31,7 +33,7 @@ async def init_http_client() -> None:
 
 
 async def close_http_client() -> None:
-    
+
     global _client
     if _client is not None and not _client.is_closed:
         await _client.aclose()

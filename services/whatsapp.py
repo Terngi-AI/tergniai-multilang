@@ -13,7 +13,6 @@ import hmac
 import logging
 import re
 from typing import Any, Dict, List, Optional
-from services.http import get_http_client
 
 import httpx
 from fastapi import HTTPException
@@ -21,6 +20,7 @@ from fastapi import HTTPException
 import config
 from services import conversations, deadline
 from services.agent import run_agent
+from services.http import get_http_client
 from services.retry import RETRY_STATUS_CODES, retry_delay
 from services.store import StoreError, make_store
 from services.text import normalize_text

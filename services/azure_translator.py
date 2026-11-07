@@ -7,20 +7,20 @@ import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
-import asyncio
 from fastapi import HTTPException
 
 import config
 import metrics
-from services import deadline, usage
+from services import deadline
 from services import glossary as glossary_service
 from services.glossary import Glossary
+from services.http import get_http_client
 from services.keypool import key_pool, mask
 from services.retry import RETRY_STATUS_CODES
 from services.retry import error_summary as _error_summary
 from services.retry import parse_retry_after as _parse_retry_after
 from services.retry import retry_delay as _retry_delay
-from services.http import get_http_client
+
 logger = logging.getLogger(__name__)
 
 # Supported languages that Azure Translator does not offer; requests involving them skip Azure
@@ -128,6 +128,7 @@ async def _call_azure(path: str, params: Dict[str, str], texts: List[str]) -> An
         raise HTTPException(
             status_code=502, detail="Invalid response from translation service"
         ) from e
+
 
 def _cooldown(response: httpx.Response) -> float:
     """How long to rest a rate-limited key: its Retry-After, or the default"""
