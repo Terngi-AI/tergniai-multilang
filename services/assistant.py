@@ -128,7 +128,8 @@ async def translate_batch(
             {"role": "user", "content": json.dumps({"texts": texts}, ensure_ascii=False)},
         ],
         parse=parse,
-        json_mode=True,
+        # Strict JSON mode can reject long single-text outputs on some providers.
+        json_mode=len(texts) > 1,
         temperature=0.2,
     )
 
