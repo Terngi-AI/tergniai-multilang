@@ -337,6 +337,9 @@ FEEDBACK_FILE = os.getenv("FEEDBACK_FILE", "feedback.jsonl")
 # Maximum number of feedback records kept. Redis drops the oldest records beyond the cap;
 # the JSONL file refuses new records when full. 0 disables the cap.
 FEEDBACK_MAX_RECORDS = int(os.getenv("FEEDBACK_MAX_RECORDS", "10000"))
+# Feedback records one caller (API key, or IP without API keys) may store per UTC day, so one
+# caller can't fill the store or flood the evaluation set (#140). 0 disables the limit.
+FEEDBACK_PER_KEY_PER_DAY = int(os.getenv("FEEDBACK_PER_KEY_PER_DAY", "200"))
 
 # Client authentication: comma-separated keys accepted in the X-API-Key header.
 # Leave empty to disable authentication (e.g. for local development).

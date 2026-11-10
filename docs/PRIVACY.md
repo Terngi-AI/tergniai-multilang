@@ -28,7 +28,8 @@ id. Phone numbers are not stored in clear text. See [WHATSAPP.md](WHATSAPP.md).
 
 Translation feedback is stored **only when the request sets `"consent": true`**. It contains
 the rated texts, language codes, the provider name, the rating, an optional correction and a
-timestamp. Accepted feedback may be published as part of the open evaluation set. See
+timestamp. Feedback sent with an API key also carries a `submitter` label, a keyed one-way
+hash of the key made only for feedback; never the key itself or an IP address. Accepted feedback may be published as part of the open evaluation set. See
 [FEEDBACK.md](FEEDBACK.md).
 
 ### Logs, metrics and rate limits

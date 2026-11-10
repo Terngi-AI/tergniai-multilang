@@ -87,10 +87,10 @@ def test_file_storage_refuses_records_past_the_cap(client, tmp_path, monkeypatch
     monkeypatch.setattr(config, "FEEDBACK_FILE", str(path))
     monkeypatch.setattr(config, "FEEDBACK_MAX_RECORDS", 2)
 
-    assert client.post("/v1/feedback", json=payload()).status_code == 200
-    assert client.post("/v1/feedback", json=payload()).status_code == 200
+    assert client.post("/v1/feedback", json=payload(source_text="One")).status_code == 200
+    assert client.post("/v1/feedback", json=payload(source_text="Two")).status_code == 200
 
-    full = client.post("/v1/feedback", json=payload())
+    full = client.post("/v1/feedback", json=payload(source_text="Three"))
 
     assert full.status_code == 507
     assert full.json()["code"] == "insufficient_storage"
@@ -98,7 +98,7 @@ def test_file_storage_refuses_records_past_the_cap(client, tmp_path, monkeypatch
 
     # 0 disables the cap for an operator who rotates the file themselves
     monkeypatch.setattr(config, "FEEDBACK_MAX_RECORDS", 0)
-    assert client.post("/v1/feedback", json=payload()).status_code == 200
+    assert client.post("/v1/feedback", json=payload(source_text="Four")).status_code == 200
     assert len(stored(path)) == 3
 
 
@@ -237,3 +237,106 @@ async def test_redis_storage_drops_the_oldest_records_at_the_cap(monkeypatch):
         store.set_redis(None)
 
     assert [json.loads(line)["id"] for line in lines] == ids[1:]
+
+
+# --- Per-key daily limit and duplicates (#140) ---
+
+
+def test_each_key_has_a_daily_feedback_limit(client, tmp_path, monkeypatch):
+    path = tmp_path / "feedback.jsonl"
+    monkeypatch.setattr(config, "FEEDBACK_FILE", str(path))
+    monkeypatch.setattr(config, "API_KEYS", ["key-one", "key-two"])
+    monkeypatch.setattr(config, "FEEDBACK_PER_KEY_PER_DAY", 2)
+    one, two = {"X-API-Key": "key-one"}, {"X-API-Key": "key-two"}
+
+    for text in ("A", "B"):
+        response = client.post("/v1/feedback", json=payload(source_text=text), headers=one)
+        assert response.status_code == 200
+
+    limited = client.post("/v1/feedback", json=payload(source_text="C"), headers=one)
+
+    assert limited.status_code == 429
+    assert limited.json()["code"] == "rate_limited"
+    assert 1 <= int(limited.headers["Retry-After"]) <= 86400
+    # Another key is not affected by the first one's limit
+    other = client.post("/v1/feedback", json=payload(source_text="C"), headers=two)
+    assert other.status_code == 200
+    assert [r["source_text"] for r in stored(path)] == ["A", "B", "C"]
+
+
+def test_duplicate_feedback_is_ignored_and_not_counted(client, tmp_path, monkeypatch):
+    path = tmp_path / "feedback.jsonl"
+    monkeypatch.setattr(config, "FEEDBACK_FILE", str(path))
+    monkeypatch.setattr(config, "FEEDBACK_PER_KEY_PER_DAY", 2)
+
+    assert client.post("/v1/feedback", json=payload()).json() == {"status": "stored"}
+    for _ in range(3):
+        repeat = client.post("/v1/feedback", json=payload())
+        assert repeat.status_code == 200
+        assert repeat.json() == {"status": "duplicate"}
+
+    # A different rating of the same translation is new feedback, and still within the limit
+    assert client.post("/v1/feedback", json=payload(rating="bad")).json() == {"status": "stored"}
+    assert len(stored(path)) == 2
+
+
+def test_records_carry_a_feedback_only_label_for_the_key(client, tmp_path, monkeypatch):
+    path = tmp_path / "feedback.jsonl"
+    monkeypatch.setattr(config, "FEEDBACK_FILE", str(path))
+    monkeypatch.setattr(config, "API_KEYS", ["key-one", "key-two"])
+
+    client.post("/v1/feedback", json=payload(source_text="A"), headers={"X-API-Key": "key-one"})
+    client.post("/v1/feedback", json=payload(source_text="B"), headers={"X-API-Key": "key-one"})
+    client.post("/v1/feedback", json=payload(source_text="C"), headers={"X-API-Key": "key-two"})
+
+    labels = [record["submitter"] for record in stored(path)]
+    assert labels[0] == labels[1] != labels[2]
+    assert all(len(label) == 16 for label in labels)
+    text = path.read_text(encoding="utf-8")
+    assert "key-one" not in text and "key-two" not in text
+    # Not the usage label either, so feedback can't be linked to usage metrics
+    from services import usage
+
+    assert usage.key_label("key-one") not in labels
+
+
+def test_without_api_keys_records_have_no_submitter(client, tmp_path, monkeypatch):
+    path = tmp_path / "feedback.jsonl"
+    monkeypatch.setattr(config, "FEEDBACK_FILE", str(path))
+
+    client.post("/v1/feedback", json=payload())
+
+    assert "submitter" not in stored(path)[0]
+
+
+def test_feedback_that_could_not_be_stored_can_be_sent_again(client, tmp_path, monkeypatch):
+    path = tmp_path / "feedback.jsonl"
+    monkeypatch.setattr(config, "FEEDBACK_FILE", str(path))
+    monkeypatch.setattr(config, "FEEDBACK_MAX_RECORDS", 1)
+
+    assert client.post("/v1/feedback", json=payload(source_text="A")).status_code == 200
+    assert client.post("/v1/feedback", json=payload(source_text="B")).status_code == 507
+
+    # The operator makes room; the same feedback is stored, not reported as a duplicate
+    monkeypatch.setattr(config, "FEEDBACK_MAX_RECORDS", 0)
+    retry = client.post("/v1/feedback", json=payload(source_text="B"))
+    assert retry.json() == {"status": "stored"}
+
+
+def test_feedback_limit_can_be_disabled(client, tmp_path, monkeypatch):
+    path = tmp_path / "feedback.jsonl"
+    monkeypatch.setattr(config, "FEEDBACK_FILE", str(path))
+    monkeypatch.setattr(config, "FEEDBACK_PER_KEY_PER_DAY", 0)
+
+    for _ in range(3):
+        assert client.post("/v1/feedback", json=payload()).json() == {"status": "stored"}
+    assert len(stored(path)) == 3
+
+
+async def test_feedback_limits_fail_open_when_storage_is_down(monkeypatch):
+    async def broken(*_args, **_kwargs):
+        raise store.StoreError("down")
+
+    monkeypatch.setattr(feedback.limits_store, "update", broken)
+
+    assert await feedback.admit("key:abc", payload()) is feedback.Admission.ACCEPTED
