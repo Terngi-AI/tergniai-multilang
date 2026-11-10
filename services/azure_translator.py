@@ -11,9 +11,10 @@ from fastapi import HTTPException
 
 import config
 import metrics
-from services import deadline, usage
+from services import deadline
 from services import glossary as glossary_service
 from services.glossary import Glossary
+from services.http import get_http_client
 from services.keypool import key_pool, mask
 from services.retry import RETRY_STATUS_CODES
 from services.retry import error_summary as _error_summary
@@ -42,21 +43,7 @@ def _headers(key: str) -> Dict[str, str]:
 
 @metrics.timed_upstream("azure")
 async def _call_azure(path: str, params: Dict[str, str], texts: List[str]) -> Any:
-    """
-    Send a request to Azure Translator and return the parsed JSON body
-
-    Keys are tried in rotation: a rejected key (401/403) is skipped for a while and a
-    rate-limited key (429) is swapped for another one when available. Throttling,
-    transient 5xx and connection errors are retried with exponential backoff.
-
-    Args:
-        path: API path, e.g. "/translate" or "/detect"
-        params: Query parameters (api-version is added automatically)
-        texts: Texts to send in the request body
-
-    Returns:
-        Parsed JSON response
-    """
+    """Send a request to Azure Translator and return the parsed JSON body"""
     if not config.AZURE_TRANSLATOR_KEYS:
         raise HTTPException(status_code=503, detail="Translation service is not configured")
 
@@ -68,84 +55,73 @@ async def _call_azure(path: str, params: Dict[str, str], texts: List[str]) -> An
     url = config.AZURE_TRANSLATOR_ENDPOINT.rstrip("/") + path
     body = [{"text": text} for text in texts]
 
-    # Make the request to Azure Translator without blocking the event loop
-    async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
-        attempt = 0
-        while True:
-            deadline.consume_attempt()
-            key = keys[0]
-            response: Optional[httpx.Response] = None
-            try:
-                response = await client.post(
-                    url,
-                    params={"api-version": "3.0", **params},
-                    headers=_headers(key),
-                    json=body,
-                    timeout=deadline.timeout(config.REQUEST_TIMEOUT),
-                )
-            except httpx.HTTPError as e:
-                retryable = isinstance(e, httpx.TransportError)
-                delay = _retry_delay(attempt, None) if retryable else None
-                if delay is None or attempt >= config.UPSTREAM_MAX_RETRIES:
-                    logger.exception("Error connecting to Azure Translator")
-                    raise HTTPException(
-                        status_code=502, detail="Error connecting to translation service"
-                    ) from e
-                reason = type(e).__name__
-            else:
-                status = response.status_code
-                if status in (401, 403):
-                    logger.warning("Azure key %s was rejected; skipping it for a while", mask(key))
-                    key_pool.cool_down(key, config.INVALID_KEY_COOLDOWN_SECONDS)
-                    keys.pop(0)
-                    if keys:
-                        continue
-                    break
-                if status == 429 and len(keys) > 1:
-                    logger.warning("Azure key %s is rate-limited; trying the next key", mask(key))
-                    key_pool.cool_down(key, _cooldown(response))
-                    keys.pop(0)
-                    continue
-                if status not in RETRY_STATUS_CODES:
-                    break
-                delay = _retry_delay(attempt, response)
-                if delay is None or attempt >= config.UPSTREAM_MAX_RETRIES:
-                    if status == 429:
-                        key_pool.cool_down(key, _cooldown(response))
-                    break
-                reason = str(status)
-
-            attempt += 1
-            logger.warning(
-                "Azure Translator %s, retrying in %.2fs (retry %d/%d)",
-                reason,
-                delay,
-                attempt,
-                config.UPSTREAM_MAX_RETRIES,
+    # Use shared HTTP client pool
+    client = await get_http_client()
+    attempt = 0
+    while True:
+        deadline.consume_attempt()
+        key = keys[0]
+        response: Optional[httpx.Response] = None
+        try:
+            response = await client.post(
+                url,
+                params={"api-version": "3.0", **params},
+                headers=_headers(key),
+                json=body,
+                timeout=deadline.timeout(config.REQUEST_TIMEOUT),
             )
-            await deadline.sleep(delay)
+        except httpx.HTTPError as e:
+            retryable = isinstance(e, httpx.TransportError)
+            delay = _retry_delay(attempt, None) if retryable else None
+            if delay is None or attempt >= config.UPSTREAM_MAX_RETRIES:
+                logger.exception("Error connecting to Azure Translator")
+                raise HTTPException(
+                    status_code=502, detail="Error connecting to translation service"
+                ) from e
+            reason = type(e).__name__
+        else:
+            status = response.status_code
+            if status in (401, 403):
+                logger.warning("Azure key %s was rejected; skipping it for a while", mask(key))
+                key_pool.cool_down(key, config.INVALID_KEY_COOLDOWN_SECONDS)
+                keys.pop(0)
+                if keys:
+                    continue
+                break
+            if status == 429 and len(keys) > 1:
+                logger.warning("Azure key %s is rate-limited; trying the next key", mask(key))
+                key_pool.cool_down(key, _cooldown(response))
+                keys.pop(0)
+                continue
+            if status not in RETRY_STATUS_CODES:
+                break
+            delay = _retry_delay(attempt, response)
+            if delay is None or attempt >= config.UPSTREAM_MAX_RETRIES:
+                if status == 429:
+                    key_pool.cool_down(key, _cooldown(response))
+                break
+            reason = str(status)
 
-    # Upstream errors are logged but not leaked to the client; the provider's error
-    # *message* can quote the user's text, so above DEBUG we log only the status,
-    # the error code/type and the request ID
+        attempt += 1
+        logger.warning(
+            "Azure Translator %s, retrying in %.2fs (retry %d/%d)",
+            reason,
+            delay,
+            attempt,
+            config.UPSTREAM_MAX_RETRIES,
+        )
+        await deadline.sleep(delay)
+
+    # Upstream errors are logged but not leaked to the client (status only, never response.text)
     if response is None or response.status_code != 200:
         if response is not None:
-            request_id = deadline.request_id()
             logger.error(
-                "Azure Translator returned %s (%s)%s",
+                "Azure Translator returned %s: %s",
                 response.status_code,
                 _error_summary(response),
-                f" [{request_id}]" if request_id else "",
             )
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(
-                    "Azure Translator returned %s, body: %s",
-                    response.status_code,
-                    response.text[:500],
-                )
         raise HTTPException(status_code=502, detail="Translation service error")
 
-    await usage.record_upstream()  # Azure does not report token usage
     try:
         return response.json()
     except ValueError as e:
