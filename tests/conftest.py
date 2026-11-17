@@ -43,7 +43,7 @@ def reset_state(monkeypatch):
     """
     import config
     from middleware import auth_failure_limiter, rate_limiter
-    from services import conversations, usage, whatsapp
+    from services import conversations, feedback, usage, whatsapp
     from services.keypool import key_pool
     from services.translator import translation_cache
 
@@ -77,6 +77,7 @@ def reset_state(monkeypatch):
     conversations.clear()
     whatsapp.clear()
     usage.usage_store.clear()
+    feedback.limits_store.clear()
     usage.begin(None)
     yield
     translation_cache.clear()
@@ -86,4 +87,5 @@ def reset_state(monkeypatch):
     conversations.clear()
     whatsapp.clear()
     usage.usage_store.clear()
+    feedback.limits_store.clear()
     usage.begin(None)

@@ -15,6 +15,9 @@ When consent is given, the following values are stored:
 - the provider name supplied by the client
 - the rating (`good` or `bad`) and an optional correction
 - a random feedback id, a UTC timestamp and the consent flag
+- for feedback sent with an API key, a `submitter` label: a keyed one-way hash of the key,
+  made only for feedback (different from the usage label), so ratings from one key can be
+  filtered out of the evaluation set if they turn out to be junk
 
 API keys, IP addresses and other client identifiers are **not** stored in feedback. Do not
 submit personal, confidential or sensitive text: accepted feedback may be published as part
@@ -43,6 +46,19 @@ recommended for a public deployment.
 The endpoint is under `/v1`, so it uses the same API-key authentication and per-client rate
 limit as the other API routes.
 
+### Limits per key
+
+So one key can't fill the store or flood the evaluation set with junk:
+
+- Each API key may store `FEEDBACK_PER_KEY_PER_DAY` records per UTC day (default `200`;
+  `0` disables the limit). Beyond that the API returns `429` with `Retry-After` set to the
+  next UTC midnight. Without `API_KEYS`, the limit applies per client IP instead.
+- Sending the same rating of the same translation (same source text, translation and rating)
+  again on the same day stores nothing and returns `{"status": "duplicate"}`. Duplicates
+  don't count towards the limit.
+- Feedback that couldn't be stored (`507` or `503`) doesn't count either, so it can be sent
+  again.
+
 ## API
 
 ```bash
@@ -61,7 +77,8 @@ curl -X POST http://localhost:8000/v1/feedback \
 ```
 
 A request may also include `"correction": "a better translation"`. The response is
-`{"status": "stored"}`.
+`{"status": "stored"}`, or `{"status": "duplicate"}` when the same feedback was already
+stored today.
 
 ## Exporting the evaluation set
 

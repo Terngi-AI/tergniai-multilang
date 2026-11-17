@@ -221,9 +221,9 @@ class FeedbackRequest(BaseModel):
 
 
 class FeedbackResponse(BaseModel):
-    """Confirmation that feedback was appended to storage"""
+    """Confirmation that feedback was stored, or was already stored today (a duplicate)"""
 
-    status: Literal["stored"] = "stored"
+    status: Literal["stored", "duplicate"] = "stored"
 
 
 class UsageStats(BaseModel):
