@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-17
+
 ### Changed
 - **Python 3.11 or newer is now required.** Python 3.10 reaches end of life in October 2026,
   and the fixes for six `filelock` advisories (GHSA-v4x8-3wr5-3wq8 and others, a
