@@ -1,7 +1,7 @@
 [project]
 name = "terngi-ai"
 version = "1.0.0"
-description = "Translation and conversational API for English and Nigerian languages (Yoruba, Hausa, Igbo)"
+description = "Open-source translation and conversational AI API for 96 languages, including local languages most software leaves out"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"

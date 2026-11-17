@@ -9,23 +9,40 @@
 [![Good first issues](https://img.shields.io/github/issues/Terngi-AI/tergniai-multilang/good%20first%20issue?label=good%20first%20issues&color=7057ff)](https://github.com/Terngi-AI/tergniai-multilang/labels/good%20first%20issue)
 [![GitHub stars](https://img.shields.io/github/stars/Terngi-AI/tergniai-multilang?style=social)](https://github.com/Terngi-AI/tergniai-multilang/stargazers)
 
-**Open-source translation and AI conversation for Nigerian languages.**
+**Open-source translation and AI conversation in 96 languages.**
 
-A **conversational AI** and translation API for **96 languages**, built
-African-first: Yoruba, Hausa, Igbo, Nigerian Pidgin, Swahili, Amharic, isiZulu and 20 more
-African languages, plus Arabic, Chinese, Spanish, French, Hindi, Japanese, Polish, Dutch, Irish
-and the other major world languages. It can use several providers at once:
+A **conversational AI** and translation API that speaks to people in the language they
+understand: widely spoken world languages and the local languages most software still
+leaves out. It covers languages across Africa, Europe, the Middle East and Asia, from
+Spanish, Arabic, Hindi and Chinese to Swahili, Tigrinya, Welsh, Pashto and Khmer. See the full
+list with `GET /v1/languages`.
+
+It can use several providers at once:
 [Azure Translator](https://learn.microsoft.com/azure/ai-services/translator/),
 [Groq](https://groq.com/) or any OpenAI-compatible API, and
-[MORENA](https://huggingface.co/vamboai/morena-1.5b-instruct), an open African-language model
-you can run for free.
+[MORENA](https://huggingface.co/vamboai/morena-1.5b-instruct), an open model for local
+languages that you can run for free.
 
 ## Why this project?
 
-More than 100 million people speak Yoruba, Hausa or Igbo, yet these languages are still
-poorly served by most software. Terngi AI gives developers a simple, self-hostable API to
-build apps, chatbots and services that speak to people in their own language, and it is
-built in the open so native speakers and developers can improve it together.
+Help often exists, but language decides who gets it. A patient at a pharmacy, a parent
+reading a letter from school, a customer calling their bank: when the message isn't in a
+language they understand, it doesn't reach them. Hundreds of millions of people speak languages that
+most software serves poorly or not at all.
+
+Terngi AI gives developers a simple, self-hostable API to build apps, chatbots and services
+that speak to people in their own language, in health, education, finance, customer support,
+travel and public services. It is built in the open, so native speakers and developers
+anywhere can improve it together.
+
+### Languages
+
+| Region | Languages |
+|---|---|
+| Africa (27) | Swahili, Yoruba, Hausa, Igbo, Nigerian Pidgin, Amharic, Somali, Tigrinya, Oromo, isiZulu, isiXhosa, Shona, Kinyarwanda, Wolof, Twi and more |
+| Europe (32) | English, French, Spanish, Portuguese, German, Italian, Polish, Romanian, Ukrainian, Irish, Welsh and more |
+| Middle East (6) | Arabic, Hebrew, Persian, Urdu, Pashto, Kurdish |
+| Asia (31) | Chinese, Cantonese, Japanese, Korean, Hindi, Bengali, Punjabi, Tamil, Vietnamese, Indonesian, Filipino, Khmer and more |
 
 ⭐ **If this is useful to you, star the repo** — it helps more people find it.
 
@@ -43,7 +60,7 @@ built in the open so native speakers and developers can improve it together.
 - **WhatsApp bot**: people message your WhatsApp number in any supported language and get
   answers in that language, with memory; plus an endpoint to send messages. See
   [docs/WHATSAPP.md](docs/WHATSAPP.md)
-- **Free, local African-language model** — run [MORENA](docs/MORENA.md) with llama.cpp
+- **Free, local model** — run [MORENA](docs/MORENA.md) with llama.cpp for its 14 languages, no API keys needed
 - **Translate** text between any two supported languages, one at a time or in batches
 - **Auto-detect** the source language — pass `"from_language": "auto"` to any endpoint
 - **Converse** in any supported language; the reply comes back in the target language,
@@ -460,7 +477,7 @@ daily. See [SECURITY.md](SECURITY.md#automated-security-scanning).
 Contributions of every size are welcome, and you don't need to be an expert:
 
 - 🟢 **New here?** Pick a [good first issue](https://github.com/Terngi-AI/tergniai-multilang/labels/good%20first%20issue).
-- 🗣️ **Speak Yoruba, Hausa, Igbo or another Nigerian language?** Help review translations
+- 🗣️ **Speak a language other than English?** Help review translations in your language
   and build our [evaluation set](https://github.com/Terngi-AI/tergniai-multilang/labels/languages). Native speakers are our most valuable contributors.
 - 🛠️ **Experienced developer?** See [help wanted](https://github.com/Terngi-AI/tergniai-multilang/labels/help%20wanted) for streaming, Redis, speech and more.
 - 💬 **Questions or ideas?** Start a conversation in [Discussions](https://github.com/Terngi-AI/tergniai-multilang/discussions).
