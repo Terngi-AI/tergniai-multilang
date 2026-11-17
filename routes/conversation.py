@@ -13,7 +13,7 @@ from services.translator import translate_text
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["conversation"])
 
 
 @router.post("/v1/converse", response_model=ConversationResponse)

@@ -23,6 +23,10 @@ env/
 coverage.xml
 htmlcov/
 
+# Local data
+feedback.jsonl
+openapi.json
+
 # Editors / OS
 .vscode/
 .idea/

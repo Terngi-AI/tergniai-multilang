@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # The first release creates this package under the repository owner. Set the package
+  # visibility to public in GitHub package settings if anonymous pulls are desired.
+  IMAGE: ghcr.io/terngi-ai/tergniai-multilang
+
+jobs:
+  publish:
+    name: Publish image and release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Validate tag and compute image tags
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Release tags must look like v1.2.3 or v1.2.3-rc1"
+            exit 1
+          fi
+          version="${tag#v}"
+          prerelease=false
+          if [[ "$tag" == *-* ]]; then
+            prerelease=true
+          fi
+          {
+            echo "version=${version}"
+            echo "prerelease=${prerelease}"
+            echo "tags<<EOF"
+            echo "${IMAGE}:${tag}"
+            echo "${IMAGE}:${version}"
+            if [[ "$prerelease" == "false" ]]; then
+              echo "${IMAGE}:latest"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push multi-architecture image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+
+      - name: Extract release notes from CHANGELOG.md
+        env:
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          python - "$TAG" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          tag = sys.argv[1]
+          version = tag.removeprefix("v")
+          changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
+
+          heading = re.search(rf"^## \[{re.escape(version)}\].*$", changelog, re.MULTILINE)
+          if heading is None:
+              heading = re.search(r"^## \[Unreleased\].*$", changelog, re.MULTILINE)
+              print(f"No [{version}] section in CHANGELOG.md; using [Unreleased].", file=sys.stderr)
+          if heading is None:
+              raise SystemExit("CHANGELOG.md has no release section")
+
+          body_start = heading.end()
+          next_heading = re.search(r"^## ", changelog[body_start:], re.MULTILINE)
+          body_end = body_start + next_heading.start() if next_heading else len(changelog)
+          notes = changelog[body_start:body_end].strip()
+          if not notes:
+              raise SystemExit(f"CHANGELOG.md section for {version} is empty")
+
+          Path("release-notes.md").write_text(notes + "\n", encoding="utf-8")
+          PY
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(
+            --repo "$GITHUB_REPOSITORY"
+            --title "Terngi AI $GITHUB_REF_NAME"
+            --notes-file release-notes.md
+            --verify-tag
+          )
+          if [[ "$PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" "${args[@]}"

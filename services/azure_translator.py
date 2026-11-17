@@ -2,7 +2,6 @@
 Azure Translator service for the Terngi Translation API
 """
 
-import asyncio
 import logging
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
@@ -12,8 +11,12 @@ from fastapi import HTTPException
 
 import config
 import metrics
+from services import deadline, usage
+from services import glossary as glossary_service
+from services.glossary import Glossary
 from services.keypool import key_pool, mask
 from services.retry import RETRY_STATUS_CODES
+from services.retry import error_summary as _error_summary
 from services.retry import parse_retry_after as _parse_retry_after
 from services.retry import retry_delay as _retry_delay
 
@@ -69,11 +72,16 @@ async def _call_azure(path: str, params: Dict[str, str], texts: List[str]) -> An
     async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
         attempt = 0
         while True:
+            deadline.consume_attempt()
             key = keys[0]
             response: Optional[httpx.Response] = None
             try:
                 response = await client.post(
-                    url, params={"api-version": "3.0", **params}, headers=_headers(key), json=body
+                    url,
+                    params={"api-version": "3.0", **params},
+                    headers=_headers(key),
+                    json=body,
+                    timeout=deadline.timeout(config.REQUEST_TIMEOUT),
                 )
             except httpx.HTTPError as e:
                 retryable = isinstance(e, httpx.TransportError)
@@ -115,14 +123,29 @@ async def _call_azure(path: str, params: Dict[str, str], texts: List[str]) -> An
                 attempt,
                 config.UPSTREAM_MAX_RETRIES,
             )
-            await asyncio.sleep(delay)
+            await deadline.sleep(delay)
 
-    # Upstream errors are logged but not leaked to the client
+    # Upstream errors are logged but not leaked to the client; the provider's error
+    # *message* can quote the user's text, so above DEBUG we log only the status,
+    # the error code/type and the request ID
     if response is None or response.status_code != 200:
         if response is not None:
-            logger.error("Azure Translator returned %s: %s", response.status_code, response.text)
+            request_id = deadline.request_id()
+            logger.error(
+                "Azure Translator returned %s (%s)%s",
+                response.status_code,
+                _error_summary(response),
+                f" [{request_id}]" if request_id else "",
+            )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "Azure Translator returned %s, body: %s",
+                    response.status_code,
+                    response.text[:500],
+                )
         raise HTTPException(status_code=502, detail="Translation service error")
 
+    await usage.record_upstream()  # Azure does not report token usage
     try:
         return response.json()
     except ValueError as e:
@@ -137,7 +160,12 @@ def _cooldown(response: httpx.Response) -> float:
     return config.KEY_COOLDOWN_SECONDS if retry_after is None else retry_after
 
 
-async def translate_batch(texts: List[str], from_language: str, to_language: str) -> List[str]:
+async def translate_batch(
+    texts: List[str],
+    from_language: str,
+    to_language: str,
+    glossary: Optional[Glossary] = None,
+) -> List[str]:
     """
     Translate several texts in a single Azure request
 
@@ -145,10 +173,24 @@ async def translate_batch(texts: List[str], from_language: str, to_language: str
         texts: Texts to translate
         from_language: Source language code
         to_language: Target language code
+        glossary: Optional terms to protect or translate consistently
 
     Returns:
         Translated texts, in the same order as the input
     """
+    entries = glossary_service.entries_for(glossary, to_language)
+    if entries and "en" in (from_language, to_language):
+        # Azure's dynamic dictionary requires English as one side of the pair.
+        texts = [glossary_service.azure_markup(text, entries) for text in texts]
+        restore_maps: List[Dict[str, str]] = [{} for _ in texts]
+    elif entries:
+        # Outside that pair use placeholders, then restore the requested terms below.
+        protected = [glossary_service.protect(text, entries) for text in texts]
+        texts = [text for text, _ in protected]
+        restore_maps = [replacements for _, replacements in protected]
+    else:
+        restore_maps = [{} for _ in texts]
+
     data = await _call_azure("/translate", {"from": from_language, "to": to_language}, texts)
     try:
         translated = [item["translations"][0]["text"] for item in data]
@@ -156,7 +198,11 @@ async def translate_batch(texts: List[str], from_language: str, to_language: str
         raise HTTPException(status_code=502, detail="No translation result received") from e
     if len(translated) != len(texts):
         raise HTTPException(status_code=502, detail="No translation result received")
-    return translated
+
+    return [
+        glossary_service.restore(text, replacements)
+        for text, replacements in zip(translated, restore_maps, strict=True)
+    ]
 
 
 async def detect_language(content: str) -> Tuple[str, float]:
@@ -171,6 +217,10 @@ async def detect_language(content: str) -> Tuple[str, float]:
     """
     data = await _call_azure("/detect", {}, [content])
     try:
-        return data[0]["language"], float(data[0].get("score", 0.0))
+        language = data[0]["language"]
+        score = float(data[0].get("score", 0.0))
     except (LookupError, TypeError, ValueError) as e:
         raise HTTPException(status_code=502, detail="No detection result received") from e
+    if not isinstance(language, str) or not language.strip():
+        raise HTTPException(status_code=502, detail="No detection result received")
+    return language, score

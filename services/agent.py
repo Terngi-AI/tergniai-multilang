@@ -16,10 +16,15 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import HTTPException
 
 import config
-from services import llm, translator
+import metrics
+from services import deadline, llm, moderation, translator
 from services.languages import resolve_source_language
+from services.text import normalize_text
 
 logger = logging.getLogger(__name__)
+
+# Receives streaming events: ("token" | "discard" | "tool", data)
+OnEvent = Callable[[str, Dict[str, Any]], Awaitable[None]]
 
 # Tool calls executed per model step; extra calls get an error result
 MAX_TOOL_CALLS_PER_STEP = 8
@@ -206,7 +211,7 @@ def _system_prompt(reply_language: str) -> str:
 def _parse_step(message: Dict[str, Any]) -> Dict[str, Any]:
     """Accept a model step only if it has tool calls or a non-empty answer"""
     tool_calls = message.get("tool_calls") or []
-    content = (message.get("content") or "").strip()
+    content = normalize_text((message.get("content") or "").strip())
     if not tool_calls and not content:
         raise ValueError("empty step")
     return {"content": content, "tool_calls": tool_calls}
@@ -249,6 +254,8 @@ async def run_agent(
     language: str = "auto",
     reply_language: Optional[str] = None,
     history: Optional[List[Dict[str, str]]] = None,
+    on_event: Optional[OnEvent] = None,
+    context: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Run the agent on a user message
@@ -258,6 +265,10 @@ async def run_agent(
         language: Language of the message, or "auto" to detect it
         reply_language: Language for the answer (defaults to the message's language)
         history: Previous user/assistant turns
+        on_event: If given, the answer is streamed. Receives ("token", {"text"}) as text
+            arrives, ("discard", {}) when streamed text turns out to precede tool calls and
+            should be dropped, and ("tool", {"tool", "ok"}) for each tool that runs
+        context: Facts from the operator to answer from (e.g. a business's opening hours)
 
     Returns:
         Dict with the answer, the languages used and the tool steps taken
@@ -265,8 +276,31 @@ async def run_agent(
     if not llm.is_configured(config.AGENT_PROVIDERS, kind="openai"):
         raise HTTPException(status_code=503, detail="Agent is not configured")
 
+    message = normalize_text(message)
     source = await resolve_source_language(message, language)
     reply = reply_language or source
+
+    # Optional prompt-guard moderation (issue #38). Classify the user's own message
+    # before it reaches the chat model; a flagged message gets a polite refusal in the
+    # user's language, without calling the model.
+    if moderation.enabled():
+        try:
+            injected = await moderation.classify(message)
+        except moderation.ModerationError:
+            if moderation.fail_closed():
+                raise HTTPException(
+                    status_code=503, detail="Moderation service unavailable"
+                ) from None
+            injected = False
+        if injected:
+            metrics.MODERATION_FLAGGED.labels("user_message").inc()
+            logger.info("Moderation flagged a user message (text not logged)")
+            return {
+                "answer": await moderation.refusal(reply),
+                "language": source,
+                "reply_language": reply,
+                "steps": [],
+            }
 
     # Give the model the original message plus an English rendering of it
     user_content = message
@@ -277,22 +311,46 @@ async def run_agent(
             f"[English translation]\n{english}"
         )
 
-    messages: List[Dict[str, Any]] = [{"role": "system", "content": _system_prompt(reply)}]
+    system = _system_prompt(reply)
+    if context:
+        system += (
+            f"\n\nInformation from the operator of this service, to use when relevant:\n{context}"
+        )
+    messages: List[Dict[str, Any]] = [{"role": "system", "content": system}]
     for turn in history or []:
         if turn.get("role") in ("user", "assistant") and turn.get("content"):
-            messages.append({"role": turn["role"], "content": turn["content"]})
+            messages.append({"role": turn["role"], "content": normalize_text(turn["content"])})
     messages.append({"role": "user", "content": user_content})
 
     steps: List[Dict[str, Any]] = []
     tools = tool_definitions()
 
     for _ in range(config.AGENT_MAX_STEPS):
+        deadline.check()
+        streamed = False
+
+        async def on_token(text: str) -> None:
+            nonlocal streamed
+            streamed = True
+            if on_event is not None:
+                await on_event("token", {"text": text})
+
         step = await llm.complete_message(
-            config.AGENT_PROVIDERS, messages, parse=_parse_step, tools=tools, temperature=0.3
+            config.AGENT_PROVIDERS,
+            messages,
+            parse=_parse_step,
+            tools=tools,
+            temperature=0.3,
+            max_tokens=config.AGENT_MAX_TOKENS,
+            on_token=on_token if on_event is not None else None,
         )
+        deadline.check()
+        if step["tool_calls"] and streamed and on_event is not None:
+            await on_event("discard", {})
         if not step["tool_calls"]:
+            answer = await _finalise_answer(step["content"], reply, steps)
             return {
-                "answer": await _finalise_answer(step["content"], reply, steps),
+                "answer": normalize_text(answer),
                 "language": source,
                 "reply_language": reply,
                 "steps": steps,
@@ -306,21 +364,54 @@ async def run_agent(
             }
         )
         for index, call in enumerate(step["tool_calls"]):
+            deadline.check()
             function = call.get("function") or {}
             name = str(function.get("name", ""))
             raw_arguments = function.get("arguments", "{}")
-            if index < MAX_TOOL_CALLS_PER_STEP:
-                output = await run_tool(name, raw_arguments)
-            else:
-                output = {"error": "Too many tool calls in one step"}
             try:
                 arguments = (
                     json.loads(raw_arguments) if isinstance(raw_arguments, str) else raw_arguments
                 )
             except ValueError:
                 arguments = raw_arguments
+
+            # Tool results that would echo user-supplied text back into the context are
+            # classified too, so an injection hidden in a translate/detect request never
+            # reaches the model. The user's own message was already checked above.
+            tool_blocked = False
+            if (
+                name in ("translate", "detect_language")
+                and isinstance(arguments, dict)
+                and isinstance(arguments.get("text"), str)
+                and arguments["text"] != message
+                and moderation.enabled()
+            ):
+                try:
+                    tool_injected = await moderation.classify(arguments["text"])
+                except moderation.ModerationError:
+                    if moderation.fail_closed():
+                        raise HTTPException(
+                            status_code=503, detail="Moderation service unavailable"
+                        ) from None
+                    tool_injected = False
+                if tool_injected:
+                    metrics.MODERATION_FLAGGED.labels("tool_result").inc()
+                    logger.info("Moderation flagged a tool result (text not logged)")
+                    output = {
+                        "error": "This content was blocked by moderation.",
+                        "moderated": True,
+                    }
+                    tool_blocked = True
+
+            if not tool_blocked:
+                if index < MAX_TOOL_CALLS_PER_STEP:
+                    output = await run_tool(name, raw_arguments)
+                else:
+                    output = {"error": "Too many tool calls in one step"}
             steps.append({"tool": name, "arguments": arguments, "output": output})
             logger.info("Agent tool %s -> %s", name, "error" if "error" in output else "ok")
+            if on_event is not None:
+                await on_event("tool", {"tool": name, "ok": "error" not in output})
             messages.append(
                 {
                     "role": "tool",
@@ -335,9 +426,13 @@ async def run_agent(
         config.AGENT_PROVIDERS,
         messages,
         parse=lambda text: _parse_step({"content": text})["content"],
+        max_tokens=config.AGENT_MAX_TOKENS,
     )
+    deadline.check()
+    answer = await _finalise_answer(answer, reply, steps)
+    deadline.check()
     return {
-        "answer": await _finalise_answer(answer, reply, steps),
+        "answer": answer,
         "language": source,
         "reply_language": reply,
         "steps": steps,

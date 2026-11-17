@@ -16,7 +16,21 @@ Thanks for helping! This guide explains how to propose changes.
 - Add support for another language.
 - Improve docs and tests.
 
-For larger changes, open an issue first so we can agree on the approach before you write code.
+## Claim an issue before you start
+
+Every pull request from outside the maintainer team must fix an issue that is **assigned to
+you**. This stops two people from working on the same thing, and keeps
+`good first issue` tasks open for newcomers.
+
+1. Find an issue, or open one and agree the approach with a maintainer.
+2. Comment on the issue that you'd like to work on it.
+3. **Wait until a maintainer assigns it to you** before you write code.
+4. Open your PR with `Closes #<issue>` in the description.
+
+Please claim one issue at a time, and open your next PR once the previous one is merged.
+An automatic check fails PRs that don't link an issue assigned to their author. Once
+you've been assigned, edit the PR description to re-run it. PRs opened for issues
+someone else is assigned to may be closed.
 
 ## Development setup
 
@@ -25,7 +39,7 @@ For larger changes, open an issue first so we can agree on the approach before y
 git clone https://github.com/<you>/tergniai-multilang.git
 cd tergniai-multilang
 
-# 2. Create a virtual environment (Python 3.10+)
+# 2. Create a virtual environment (Python 3.11+)
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
@@ -76,9 +90,13 @@ maintainer must approve.
 
 ## Pull request checklist
 
-- CI is green (lint, types, tests on Python 3.10–3.13, Docker build, security scans).
+- The PR links an issue that is assigned to you (`Closes #123`).
+- CI is green (lint, types, tests on Python 3.11–3.13, Docker build, security scans).
 - Coverage stays at or above 85%.
 - New behaviour is documented in `README.md`.
+- If the change adds or removes an AI provider in `config.py`,
+  [docs/DATA.md](docs/DATA.md) is updated (what that provider receives and its retention
+  and training terms).
 - No secrets, `.env` files or large binaries are committed.
 - The Security workflow passes (malware, code, dependency, container and attack scans).
 
@@ -105,8 +123,8 @@ This project doesn't use Dependabot, so dependencies are updated by hand:
   After changing `requirements*.txt`, or to pick up security fixes, regenerate both and audit them:
 
   ```bash
-  uv pip compile requirements.txt --universal --python-version 3.10 --generate-hashes -o requirements.lock
-  uv pip compile requirements-dev.txt --universal --python-version 3.10 --generate-hashes -o requirements-dev.lock
+  uv pip compile requirements.txt --universal --python-version 3.11 --generate-hashes -o requirements.lock
+  uv pip compile requirements-dev.txt --universal --python-version 3.11 --generate-hashes -o requirements-dev.lock
   pip-audit --strict --require-hashes --disable-pip -r requirements-dev.lock
   ```
 
@@ -114,13 +132,45 @@ This project doesn't use Dependabot, so dependencies are updated by hand:
 - **GitHub Actions:** actions are pinned to a full commit SHA with the version in a comment, e.g.
   `actions/checkout@<sha> # v4.4.0`. To update one, look up the new release's commit
   (`gh api repos/actions/checkout/commits/v4.5.0 --jq .sha`) and replace both the SHA and the comment.
-- **Scanner versions** are set at the top of `security.yml`.
+- **Container images:** every image is pinned by tag **and** digest, so a moved or
+  compromised tag can't silently change what we build or run:
+  - `Dockerfile` — the `python:3.12-slim` base image;
+  - `docker-compose.yml` — `redis:8.2-alpine`, and the MORENA server, pinned to a
+    **versioned** build tag (`ghcr.io/ggml-org/llama.cpp:server-b<build>`) because the plain
+    `server` tag moves on every upstream build;
+  - `.github/workflows/security.yml` — the scanner images (OSV-Scanner, Trivy, ZAP, ClamAV;
+    ClamAV is pinned to the version its moving `stable` tag points to), and
+    `.github/workflows/ci.yml` — gitleaks.
+
+  Bump them about once a month, or sooner after a security advisory, in one commit that
+  changes the tag **and** the digest together. The ClamAV pin is the exception to the
+  regular cadence: the malware job refreshes the virus signatures with `freshclam` before
+  every scan, so its digest only needs bumping when a new ClamAV release ships. Look up a
+  tag's digest with:
+
+  ```bash
+  docker buildx imagetools inspect python:3.12-slim
+  # prints "Name:  docker.io/library/python:3.12-slim" and "Digest: sha256:..."
+  ```
+
+  (or `curl -sI` the registry's manifest endpoint). For a new llama.cpp build, list the
+  `server-b<build>` tags in the
+  [package's versions](https://github.com/ggml-org/llama.cpp/pkgs/container/llama.cpp/versions)
+  and pin the newest one you want; Trivy already scans the image in CI.
 
 ## Adding a language
 
 1. Check the language is supported by [Azure Translator](https://learn.microsoft.com/azure/ai-services/translator/language-support).
 2. Add its code to `SUPPORTED_LANGUAGES` in `config.py`.
 3. Update the tests and the README.
+
+## Data and published content
+
+- Never commit raw user data (conversations, feedback, WhatsApp transcripts).
+- Every dataset under `data/` needs a dataset card (template: `docs/DATASET.md`) with
+  sources, licences, consent and known biases.
+- Anything published from user-generated content goes through `scripts/redact_pii.py`
+  first, and a maintainer reviews the card before merge. See `data/README.md`.
 
 ## License
 

@@ -62,9 +62,27 @@ Supply-chain hardening:
 - Optional API-key authentication; keys are compared in constant time and never logged.
 - Per-client rate limiting. Only valid API keys count as a separate client, so made-up keys can't
   be used to dodge the limit.
+- The translation cache is scoped per API key by default when keys are configured
+  (`CACHE_SCOPE=key`), so one caller can't use cache timing to tell whether another caller
+  recently translated a given text. Set `CACHE_SCOPE=global` to share the cache again.
 - Request bodies larger than `MAX_REQUEST_BYTES` (1 MiB by default) are rejected with `413`,
   including streamed bodies without a `Content-Length`.
 - Security headers on every response: `X-Content-Type-Options`, `X-Frame-Options`,
   `Referrer-Policy`, `Permissions-Policy`, a strict `Content-Security-Policy`, and HSTS over HTTPS.
-- Upstream error details are logged, never returned to clients. Conversation history can't
-  inject system prompts.
+- Redis (optional) should never be reachable from the internet: keep it on a private network
+  (as in `docker-compose.yml`) and use a password or TLS (`rediss://user:pass@host`) in
+  `REDIS_URL` when it isn't local. API keys are stored only as hashes in Redis keys and
+  conversation owners.
+- Upstream error details are logged, never returned to clients. Since providers can echo the
+  user's text in error messages, `INFO`/`WARNING` logs carry only the status, the provider's
+  error code and the request ID; the (truncated) body is logged at `DEBUG` only.
+  Conversation history can't inject system prompts.
+- User text is sent to third-party AI providers that act as data processors. What each
+  provider receives and its retention and training terms are documented in
+  [docs/DATA.md](docs/DATA.md), which must be reviewed whenever a provider is added.
+
+## For operators
+
+Before exposing the API to the internet, work through the threat model and the operator
+checklist in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md): assets, threats and
+mitigations, and the settings to check before first startup and on a regular basis.

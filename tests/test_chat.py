@@ -56,6 +56,16 @@ def test_chat_is_a_general_assistant(client):
 
 
 @respx.mock
+def test_chat_model_calls_are_capped_with_max_tokens(client):
+    route = respx.post(CHAT_URL).mock(return_value=answer("Hello there!"))
+
+    say(client, "Hi")
+
+    body = json.loads(route.calls.last.request.content)
+    assert body["max_tokens"] == config.AGENT_MAX_TOKENS
+
+
+@respx.mock
 def test_get_and_delete_conversation(client):
     respx.post(CHAT_URL).mock(return_value=answer("Hello!"))
     conversation_id = say(client, "Hi").json()["conversation_id"]
@@ -101,6 +111,21 @@ def test_history_is_capped(client, monkeypatch):
     assert [m["content"] for m in messages] == ["two", "ok", "three", "ok"]
 
 
+@respx.mock
+def test_provider_history_is_bounded_by_characters(client, monkeypatch):
+    monkeypatch.setattr(config, "CONVERSATION_MAX_CHARS", 12)
+    route = respx.post(CHAT_URL).mock(return_value=answer("ok"))
+
+    conversation_id = say(client, "one").json()["conversation_id"]
+    for text in ["two", "three", "four"]:
+        say(client, text, conversation_id)
+
+    sent = json.loads(route.calls[-1].request.content)["messages"]
+    history = sent[1:-1]
+    assert [message["content"] for message in history] == ["two", "ok", "three", "ok"]
+    assert sum(len(message["content"]) for message in history) <= 12
+
+
 def test_failed_reply_is_not_stored(client, monkeypatch):
     monkeypatch.setattr(config, "AGENT_PROVIDERS", [])
 
@@ -115,7 +140,12 @@ def test_chat_page_is_served(client, monkeypatch):
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "Terngi" in response.text
-    assert "/v1/chat" in response.text
+    # The page is self-hosted: no inline script/style, assets from the same origin
+    assert "<script>" not in response.text
+    assert "<style>" not in response.text
+    assert 'src="/static/chat.js"' in response.text
+    assert 'href="/static/chat.css"' in response.text
+    assert "/v1/chat" in client.get("/static/chat.js").text
 
 
 # --- Languages per provider --------------------------------------------------
@@ -140,7 +170,8 @@ def test_morena_is_only_used_for_its_languages(client, monkeypatch):
     )
     groq_route = respx.post(CHAT_URL).mock(
         return_value=httpx.Response(
-            200, json={"choices": [{"message": {"content": '{"translations": ["你好"]}'}}]}
+            200,
+            json={"choices": [{"message": {"content": '{"translations": ["你好"]}'}}]},
         )
     )
 

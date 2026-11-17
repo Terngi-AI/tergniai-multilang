@@ -15,8 +15,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("UPSTREAM_RETRY_BASE_DELAY", "0")
 # Never read a developer's local .env during tests
 os.environ["ENV_FILE"] = os.devnull
+# The test suite leaves API_KEYS empty by default; local development is the only
+# context where unauthenticated startup is allowed.
+os.environ.setdefault("ALLOW_UNAUTHENTICATED", "true")
 os.environ.setdefault("AZURE_TRANSLATOR_KEY", "test-azure-key")
 os.environ.setdefault("GROQ_API_KEY", "test-groq-key")
+# Keying secret for personal identifiers; the app refuses to start without it
+os.environ.setdefault("HASH_SECRET", "test-hash-secret")
 
 from main import app  # noqa: E402
 
@@ -37,10 +42,12 @@ def reset_state(monkeypatch):
     Translation and detection use Azure only unless a test opts into the LLM chain.
     """
     import config
-    from middleware import rate_limiter
-    from services import conversations
+    from middleware import auth_failure_limiter, rate_limiter
+    from services import conversations, feedback, usage, whatsapp
     from services.keypool import key_pool
     from services.translator import translation_cache
+
+    monkeypatch.setattr(config, "ALLOW_UNAUTHENTICATED", True)
 
     monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", ["test-azure-key"])
     monkeypatch.setattr(
@@ -65,10 +72,20 @@ def reset_state(monkeypatch):
 
     translation_cache.clear()
     rate_limiter.reset()
+    auth_failure_limiter.reset()
     key_pool.reset()
     conversations.clear()
+    whatsapp.clear()
+    usage.usage_store.clear()
+    feedback.limits_store.clear()
+    usage.begin(None)
     yield
     translation_cache.clear()
     rate_limiter.reset()
+    auth_failure_limiter.reset()
     key_pool.reset()
     conversations.clear()
+    whatsapp.clear()
+    usage.usage_store.clear()
+    feedback.limits_store.clear()
+    usage.begin(None)

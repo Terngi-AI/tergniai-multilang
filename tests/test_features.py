@@ -2,6 +2,8 @@
 Tests for detection, batch translation, caching, auth, rate limiting and readiness
 """
 
+import logging
+
 import httpx
 import respx
 
@@ -163,6 +165,36 @@ def test_repeat_translation_is_cached(client):
     assert route.call_count == 1
 
 
+@respx.mock
+def test_key_scope_isolates_the_cache_between_api_keys(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["key-a", "key-b"])
+    monkeypatch.setattr(config, "CACHE_SCOPE", "key")
+    route = respx.post(TRANSLATE_URL).mock(return_value=azure_translations("Bawo ni"))
+    payload = {"content": "Hello", "from_language": "en", "to_language": "yo"}
+
+    first = client.post("/v1/translate", json=payload, headers={"X-API-Key": "key-a"})
+    second = client.post("/v1/translate", json=payload, headers={"X-API-Key": "key-b"})
+    third = client.post("/v1/translate", json=payload, headers={"X-API-Key": "key-a"})
+
+    for response in (first, second, third):
+        assert response.json()["translated_text"] == "Bawo ni"
+    # key-b couldn't reuse key-a's cached translation, but key-a reuses its own
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_global_scope_shares_the_cache_between_api_keys(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["key-a", "key-b"])
+    monkeypatch.setattr(config, "CACHE_SCOPE", "global")
+    route = respx.post(TRANSLATE_URL).mock(return_value=azure_translations("Bawo ni"))
+    payload = {"content": "Hello", "from_language": "en", "to_language": "yo"}
+
+    client.post("/v1/translate", json=payload, headers={"X-API-Key": "key-a"})
+    client.post("/v1/translate", json=payload, headers={"X-API-Key": "key-b"})
+
+    assert route.call_count == 1
+
+
 def test_cache_expires_and_evicts(monkeypatch):
     now = [100.0]
     monkeypatch.setattr("services.cache.time.monotonic", lambda: now[0])
@@ -252,15 +284,15 @@ def test_made_up_api_keys_cannot_bypass_rate_limit(client, monkeypatch):
     assert statuses == [200, 200, 429, 429]
 
 
-def test_rate_limiter_forgets_idle_clients(monkeypatch):
+async def test_rate_limiter_forgets_idle_clients(monkeypatch):
     now = [0.0]
     monkeypatch.setattr(middleware.time, "monotonic", lambda: now[0])
     limiter = middleware.RateLimiter(limit=5, window=60)
 
     for i in range(999):
-        limiter.hit(f"ip:{i}")
+        await limiter.hit(f"ip:{i}")
     now[0] = 120  # every client has been idle for longer than the window
-    limiter.hit("ip:fresh")  # the 1000th call triggers a sweep
+    await limiter.hit("ip:fresh")  # the 1000th call triggers a sweep
 
     assert set(limiter._hits) == {"ip:fresh"}
 
@@ -277,17 +309,97 @@ def test_request_id_is_generated_and_echoed(client):
     assert "X-Process-Time-Ms" in echoed.headers
 
 
-def test_ready_when_configured(client):
+def test_malformed_or_oversized_request_ids_are_replaced(client):
+    # A 129-char ID and IDs with spaces / newlines are rejected (a real client can
+    # also send non-ASCII or empty values; the regex rejects those too)
+    for bad in ["a" * 129, "has space", "log\ninjection: x", "abc\n", ""]:
+        response = client.get("/health", headers={"X-Request-ID": bad})
+        echoed = response.headers["X-Request-ID"]
+        assert echoed != bad
+        assert middleware.REQUEST_ID_RE.match(echoed)
+
+    # A valid ID at the size limit (128) is still accepted
+    boundary = "a" * 128
+    assert (
+        client.get("/health", headers={"X-Request-ID": boundary}).headers["X-Request-ID"]
+        == boundary
+    )
+
+
+def test_access_log_uses_route_template_not_raw_path(client, caplog):
+    conversation_id = "conversation-secret-abc123"
+
+    with caplog.at_level(logging.INFO, logger="middleware"):
+        client.get(f"/v1/chat/{conversation_id}")
+
+    logged = "\n".join(r.getMessage() for r in caplog.records if r.name == "middleware")
+    assert conversation_id not in logged
+    assert "/v1/chat/{conversation_id}" in logged
+
+
+def test_ready_when_configured(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["secret"])
+
+    response = client.get("/health/ready", headers={"X-API-Key": "secret"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
+    assert response.json()["services"] == {
+        "translator": True,
+        "llm": True,
+        "agent": True,
+        "storage": True,
+        "auth": True,
+    }
+
+
+def test_ready_shows_service_details_when_auth_is_off(client):
+    # No API keys configured: nothing is protected, so the details are shown to
+    # everyone (and auth is reported off, but readiness stays "ready")
     response = client.get("/health/ready")
 
     assert response.status_code == 200
-    assert response.json()["services"] == {"translator": True, "llm": True, "agent": True}
+    assert response.json()["status"] == "ready"
+    assert response.json()["services"] == {
+        "translator": True,
+        "llm": True,
+        "agent": True,
+        "storage": True,
+        "auth": False,
+    }
+
+
+def test_ready_hides_service_details_from_strangers(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["secret"])
+
+    response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
+    assert "services" not in response.json()
+
+
+def test_ready_is_degraded_when_agent_is_not_configured(client, monkeypatch):
+    monkeypatch.setattr(config, "AGENT_PROVIDERS", [])
+    monkeypatch.setattr(config, "API_KEYS", ["secret"])
+
+    response = client.get("/health/ready", headers={"X-API-Key": "secret"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "degraded"
+    assert response.json()["services"]["agent"] is False
+    assert response.json()["services"]["translator"] is True
 
 
 def test_not_ready_without_keys(client, monkeypatch):
     monkeypatch.setattr(config, "CHAT_PROVIDERS", [])
+    monkeypatch.setattr(config, "AGENT_PROVIDERS", [])
+    monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", [])
+    monkeypatch.setattr(config, "API_KEYS", ["secret"])
 
-    response = client.get("/health/ready")
+    response = client.get("/health/ready", headers={"X-API-Key": "secret"})
 
     assert response.status_code == 503
+    assert response.json()["status"] == "not_ready"
+    assert response.json()["services"]["translator"] is False
     assert response.json()["services"]["llm"] is False

@@ -2,13 +2,61 @@
 Pydantic models for the Terngi Translation API
 """
 
-from typing import Annotated, Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field
 
 from config import MAX_BATCH_SIZE, MAX_CONTENT_LENGTH, MAX_MEMORY_MESSAGES
+from services.text import normalize_value
 
-Text = Annotated[str, Field(min_length=1, max_length=MAX_CONTENT_LENGTH)]
+# User-provided text is normalised before length validation, so an NFD spelling cannot
+# reject a value whose composed form fits. Responses use the same form.
+NfcText = Annotated[str, BeforeValidator(normalize_value)]
+StoredText = Annotated[str, BeforeValidator(normalize_value), Field(max_length=MAX_CONTENT_LENGTH)]
+Text = Annotated[
+    str,
+    BeforeValidator(normalize_value),
+    Field(min_length=1, max_length=MAX_CONTENT_LENGTH),
+]
+
+MAX_GLOSSARY_TERMS = 100
+MAX_GLOSSARY_TERM_LENGTH = 200
+
+
+def normalize_glossary(value: Any) -> Any:
+    """Normalise every term and translation to NFC before validating the glossary"""
+    if not isinstance(value, dict):
+        return value
+
+    normalized: Dict[str, Any] = {}
+    for source, translation in value.items():
+        if not isinstance(source, str):
+            return value
+        source = normalize_value(source)
+        if not source.strip():
+            raise ValueError("glossary terms must not be empty")
+        if isinstance(translation, str):
+            normalized[source] = normalize_value(translation)
+        elif isinstance(translation, dict):
+            normalized[source] = {
+                str(language): normalize_value(text) for language, text in translation.items()
+            }
+        else:
+            normalized[source] = translation
+    return normalized
+
+
+GlossaryTranslation = Annotated[str, Field(min_length=1, max_length=MAX_CONTENT_LENGTH)]
+GlossaryByLanguage = Annotated[Dict[str, GlossaryTranslation], Field(min_length=1, max_length=100)]
+GlossaryValue = Union[GlossaryTranslation, GlossaryByLanguage]
+Glossary = Annotated[
+    Dict[
+        Annotated[str, Field(min_length=1, max_length=MAX_GLOSSARY_TERM_LENGTH)],
+        GlossaryValue,
+    ],
+    BeforeValidator(normalize_glossary),
+    Field(max_length=MAX_GLOSSARY_TERMS),
+]
 
 
 class TranslationRequest(BaseModel):
@@ -17,22 +65,25 @@ class TranslationRequest(BaseModel):
     content: Text
     from_language: str = Field(..., description='Language code, or "auto" to detect it')
     to_language: str
+    glossary: Optional[Glossary] = Field(
+        None, description="Terms to protect or translate consistently, e.g. {'Terngi': 'Terngi'}"
+    )
 
 
 class TranslationResponse(BaseModel):
     """Response model for translation endpoints"""
 
-    translated_text: str
+    translated_text: NfcText
     from_language: str
     to_language: str
-    original_text: str
+    original_text: NfcText
 
 
 class MemoryMessage(BaseModel):
     """A previous turn in the conversation (system messages are not allowed)"""
 
     role: Literal["user", "assistant"]
-    content: str = Field(..., max_length=MAX_CONTENT_LENGTH)
+    content: StoredText
 
 
 class ConversationRequest(BaseModel):
@@ -49,11 +100,11 @@ class ConversationRequest(BaseModel):
 class ConversationResponse(BaseModel):
     """Response model for conversation endpoints"""
 
-    translated_text: str
+    translated_text: NfcText
     from_language: str
     to_language: str
-    original_text: str
-    response: Optional[str] = None
+    original_text: NfcText
+    response: Optional[NfcText] = None
 
 
 class BatchTranslationRequest(BaseModel):
@@ -62,12 +113,15 @@ class BatchTranslationRequest(BaseModel):
     texts: List[Text] = Field(..., min_length=1, max_length=MAX_BATCH_SIZE)
     from_language: str = Field(..., description='Language code, or "auto" to detect it')
     to_language: str
+    glossary: Optional[Glossary] = Field(
+        None, description="Terms to protect or translate consistently, e.g. {'Terngi': 'Terngi'}"
+    )
 
 
 class BatchTranslationResponse(BaseModel):
     """Response model for batch translation"""
 
-    translations: List[str]
+    translations: List[NfcText]
     from_language: str
     to_language: str
 
@@ -109,7 +163,7 @@ class AgentStep(BaseModel):
 class AgentResponse(BaseModel):
     """Response model for the agent endpoint"""
 
-    answer: str
+    answer: NfcText
     language: str
     reply_language: str
     steps: List[AgentStep]
@@ -132,7 +186,7 @@ class ChatResponse(BaseModel):
     """Response model for the chat endpoint"""
 
     conversation_id: str
-    reply: str
+    reply: NfcText
     language: str
     reply_language: str
     steps: List[AgentStep]
@@ -143,3 +197,100 @@ class ConversationHistory(BaseModel):
 
     conversation_id: str
     messages: List[MemoryMessage]
+
+
+class FeedbackRequest(BaseModel):
+    """A good/bad rating for a translation or chat reply (opt-in only)"""
+
+    source_text: Text
+    translated_text: Text
+    from_language: str
+    to_language: str
+    provider: str = Field(..., min_length=1, max_length=100)
+    rating: Literal["good", "bad"]
+    correction: Optional[StoredText] = Field(
+        None, description="An optional better translation supplied by the user"
+    )
+    consent: bool = Field(
+        False,
+        description=(
+            "Must be true. Confirms that the feedback may be stored and published as part "
+            "of the open evaluation set."
+        ),
+    )
+
+
+class FeedbackResponse(BaseModel):
+    """Confirmation that feedback was stored, or was already stored today (a duplicate)"""
+
+    status: Literal["stored", "duplicate"] = "stored"
+
+
+class UsageStats(BaseModel):
+    """Usage counters for one API key on one UTC day"""
+
+    date: str
+    requests: int
+    upstream_calls: int
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
+class UsageResponse(BaseModel):
+    """Usage for the calling API key (issue #47)"""
+
+    usage: List[UsageStats]
+    quota: Optional[int] = Field(
+        default=None, description="Daily request quota for this key, if any"
+    )
+    remaining: Optional[int] = Field(
+        default=None, description="Requests left today before the quota"
+    )
+    resets_at: Optional[str] = Field(default=None, description="When the daily quota resets (UTC)")
+
+
+class ConversationExport(BaseModel):
+    """A conversation downloaded for a data-access request"""
+
+    conversation_id: str
+    exported_at: str
+    messages: List[MemoryMessage]
+
+
+class ConversationDeleteResponse(BaseModel):
+    """How many of the caller's conversations were deleted"""
+
+    deleted: int
+
+
+class WhatsAppTemplate(BaseModel):
+    """An approved WhatsApp template (needed to message someone first, or after 24 hours)"""
+
+    name: str = Field(..., min_length=1, max_length=512)
+    language: str = Field("en", description="The template's WhatsApp language code, e.g. en_GB")
+    parameters: List[str] = Field(default_factory=list, description="Values for its body variables")
+
+
+class WhatsAppSendRequest(BaseModel):
+    """Send a WhatsApp message, optionally translated into the recipient's language"""
+
+    to: str = Field(..., description="Phone number with country code, e.g. +447700900123")
+    text: Optional[
+        Annotated[
+            str,
+            BeforeValidator(normalize_value),
+            Field(min_length=1, max_length=20000),
+        ]
+    ] = None
+    from_language: str = Field("en", description="Language of `text`")
+    to_language: Optional[str] = Field(
+        None, description="Translate `text` into this language first"
+    )
+    template: Optional[WhatsAppTemplate] = None
+
+
+class WhatsAppSendResponse(BaseModel):
+    to: str
+    message_ids: List[str]
+    text: Optional[str] = None

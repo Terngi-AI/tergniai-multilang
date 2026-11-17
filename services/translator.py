@@ -5,29 +5,80 @@ Providers come from TRANSLATION_PROVIDERS / DETECTION_PROVIDERS: "azure" or any 
 provider name. Unconfigured providers are skipped; if one fails the next is tried.
 """
 
+import hashlib
 import logging
+from contextvars import ContextVar
 from typing import Awaitable, Callable, List, Optional, Sequence, Tuple, TypeVar
 
 from fastapi import HTTPException
 
 import config
 import metrics
-from services import assistant, azure_translator
-from services.cache import TTLCache
+from services import assistant, azure_translator, deadline, llm
+from services.glossary import Glossary, cache_signature, entries_for
+from services.store import StoreError, make_store
+from services.text import normalize_text
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
-# Cache of (from_language, to_language, content) -> translated text
-translation_cache = TTLCache(max_items=config.CACHE_MAX_ITEMS, ttl=config.CACHE_TTL_SECONDS)
+# Cache of (from_language, to_language, content, glossary) -> translated text
+translation_cache = make_store("translation", config.CACHE_MAX_ITEMS, config.CACHE_TTL_SECONDS)
+
+# Which callers share one cache entry: bound per request by the middleware when
+# config.CACHE_SCOPE is "key" - the caller's key fingerprint, or "public" for keyless
+# requests. None means the global cache.
+_cache_scope: ContextVar[Optional[str]] = ContextVar("translation_cache_scope", default=None)
+
+
+def set_cache_scope(scope: Optional[str]):
+    """Bind the cache scope for the current request; returns the token to reset with"""
+    return _cache_scope.set(scope)
+
+
+def reset_cache_scope(token) -> None:
+    _cache_scope.reset(token)
+
+
+def _cache_key(
+    from_language: str, to_language: str, text: str, glossary: Optional[Glossary] = None
+) -> str:
+    """Fixed-length cache key, so long texts don't make huge Redis keys"""
+    normalized = normalize_text(text)
+    payload = f"{from_language}\x00{to_language}\x00{normalized}"
+    entries = entries_for(glossary, to_language)
+    if entries:
+        payload += "\x00" + cache_signature(entries)
+    scope = _cache_scope.get()
+    if scope is not None:
+        # Entries are only shared within one scope, so one caller can't tell (from cache
+        # timing) whether another caller recently translated this text
+        payload += f"\x00{scope}"
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+async def _cache_get(key: str) -> Optional[str]:
+    try:
+        return await translation_cache.get(key)
+    except StoreError:
+        logger.warning("Translation cache unavailable; translating without it")
+        return None
+
+
+async def _cache_set(key: str, value: str) -> None:
+    try:
+        await translation_cache.set(key, value)
+    except StoreError:
+        logger.warning("Translation cache unavailable; result not cached")
 
 
 def _is_configured(name: str, languages: Sequence[str] = ()) -> bool:
     if name == "azure":
         return bool(config.AZURE_TRANSLATOR_KEYS) and azure_translator.supports(*languages)
     provider = config.LLM_PROVIDERS.get(name)
-    return provider is not None and provider.configured and provider.supports(*languages)
+    # Providers resting after being unreachable are skipped quietly
+    return llm.is_available(name) and provider is not None and provider.supports(*languages)
 
 
 def translation_available() -> bool:
@@ -45,10 +96,13 @@ async def _run_chain(
     last_error: Optional[HTTPException] = None
 
     for name in providers:
+        deadline.check()
         if not _is_configured(name, languages):
             continue
         try:
-            return await (azure_call() if name == "azure" else llm_call(name))
+            result = await (azure_call() if name == "azure" else llm_call(name))
+            deadline.check()
+            return result
         except HTTPException as e:
             if e.status_code < 500:
                 raise
@@ -60,7 +114,12 @@ async def _run_chain(
     raise last_error
 
 
-async def translate_text(content: str, from_language: str, to_language: str) -> str:
+async def translate_text(
+    content: str,
+    from_language: str,
+    to_language: str,
+    glossary: Optional[Glossary] = None,
+) -> str:
     """
     Translate a single text
 
@@ -68,14 +127,20 @@ async def translate_text(content: str, from_language: str, to_language: str) -> 
         content: Text to translate
         from_language: Source language code
         to_language: Target language code
+        glossary: Optional terms to protect or translate consistently
 
     Returns:
         Translated text
     """
-    return (await translate_batch([content], from_language, to_language))[0]
+    return (await translate_batch([content], from_language, to_language, glossary))[0]
 
 
-async def translate_batch(texts: List[str], from_language: str, to_language: str) -> List[str]:
+async def translate_batch(
+    texts: List[str],
+    from_language: str,
+    to_language: str,
+    glossary: Optional[Glossary] = None,
+) -> List[str]:
     """
     Translate several texts, reusing cached results
 
@@ -83,17 +148,22 @@ async def translate_batch(texts: List[str], from_language: str, to_language: str
         texts: Texts to translate
         from_language: Source language code
         to_language: Target language code
+        glossary: Optional terms to protect or translate consistently
 
     Returns:
         Translated texts, in the same order as the input
     """
+    # Normalise first so composed and decomposed spellings share one cache entry and one
+    # provider request.
+    texts = [normalize_text(text) for text in texts]
+
     # If source and target languages are the same, no need to translate
     if from_language == to_language:
-        return list(texts)
+        return texts
 
-    results: List[Optional[str]] = [
-        translation_cache.get((from_language, to_language, text)) for text in texts
-    ]
+    deadline.check()
+    keys = [_cache_key(from_language, to_language, text, glossary) for text in texts]
+    results: List[Optional[str]] = [await _cache_get(key) for key in keys]
     missing = [i for i, result in enumerate(results) if result is None]
     metrics.CACHE_LOOKUPS.labels("hit").inc(len(texts) - len(missing))
     metrics.CACHE_LOOKUPS.labels("miss").inc(len(missing))
@@ -102,15 +172,18 @@ async def translate_batch(texts: List[str], from_language: str, to_language: str
         pending = [texts[i] for i in missing]
         translated = await _run_chain(
             config.TRANSLATION_PROVIDERS,
-            lambda: azure_translator.translate_batch(pending, from_language, to_language),
-            lambda name: assistant.translate_batch(pending, from_language, to_language, name),
+            lambda: azure_translator.translate_batch(pending, from_language, to_language, glossary),
+            lambda name: assistant.translate_batch(
+                pending, from_language, to_language, name, glossary
+            ),
             languages=(from_language, to_language),
         )
         for i, text in zip(missing, translated, strict=True):
-            results[i] = text
-            translation_cache.set((from_language, to_language, texts[i]), text)
+            normalized = normalize_text(text)
+            results[i] = normalized
+            await _cache_set(keys[i], normalized)
 
-    return [result or "" for result in results]
+    return [normalize_text(result or "") for result in results]
 
 
 # Codes that detectors commonly return, mapped to the codes used by this API
@@ -148,9 +221,12 @@ async def detect_language(content: str) -> Tuple[str, float]:
     Returns:
         Tuple of (language code, confidence score between 0 and 1)
     """
+    content = normalize_text(content)
     language, score = await _run_chain(
         config.DETECTION_PROVIDERS,
         lambda: azure_translator.detect_language(content),
         lambda name: assistant.detect_language(content, name),
     )
+    if not isinstance(language, str) or not language.strip():
+        raise HTTPException(status_code=502, detail="Invalid language detection result")
     return canonical_language(language), score

@@ -5,6 +5,7 @@ Secrets are read from environment variables (or a local `.env` file).
 Never hardcode API keys in this file.
 """
 
+import logging
 import os
 from dataclasses import dataclass
 from typing import Dict, FrozenSet, List, Optional, Tuple
@@ -248,20 +249,66 @@ AGENT_PROVIDERS = _env_list("AGENT_PROVIDERS") or [
 ]
 # Maximum reasoning/tool steps per agent request
 AGENT_MAX_STEPS = int(os.getenv("AGENT_MAX_STEPS", "6"))
+# Max tokens generated per agent model call. Since a request can run up to
+# AGENT_MAX_STEPS calls, this bounds the cost and duration of a single agent request.
+AGENT_MAX_TOKENS = int(os.getenv("AGENT_MAX_TOKENS", "1500"))
+
+# Optional prompt-injection moderation for chat and agent (issue #38). Leave
+# MODERATION_PROVIDERS empty to disable it entirely (no extra latency). Providers are LLM
+# provider names that serve the prompt-guard classifier (e.g. Groq's
+# meta-llama/llama-prompt-guard-2-86m). MODERATION_FAIL_MODE controls what happens when the
+# classifier cannot be reached: "open" lets the request through, "closed" refuses it.
+MODERATION_PROVIDERS = _env_list("MODERATION_PROVIDERS")
+PROMPT_GUARD_MODEL = os.getenv("PROMPT_GUARD_MODEL", "meta-llama/llama-prompt-guard-2-86m")
+# Groq answers Prompt Guard 2 with a probability score (e.g. "0.9876"); a score at or
+# above this threshold counts as an injection. Label-based answers (PG1 style) are
+# matched separately, so self-hosted deployments keep working.
+MODERATION_THRESHOLD = float(os.getenv("MODERATION_THRESHOLD", "0.5"))
+MODERATION_FAIL_MODE = os.getenv("MODERATION_FAIL_MODE", "open").strip().lower()
+if MODERATION_FAIL_MODE not in ("open", "closed"):
+    logging.getLogger(__name__).warning(
+        "Unknown MODERATION_FAIL_MODE %r; using 'open'", MODERATION_FAIL_MODE
+    )
+    MODERATION_FAIL_MODE = "open"
+
+# Shared storage. With REDIS_URL set (e.g. redis://localhost:6379/0), the translation cache,
+# rate limits and chat conversations are shared by every replica and survive restarts.
+# Without it they live in each process's memory.
+REDIS_URL = os.getenv("REDIS_URL", "")
+REDIS_PREFIX = os.getenv("REDIS_PREFIX", "terngi:")
+REDIS_TIMEOUT = float(os.getenv("REDIS_TIMEOUT", "2"))
 
 # Server-side chat memory for /v1/chat (in memory, per process)
 CONVERSATION_TTL_SECONDS = int(os.getenv("CONVERSATION_TTL_SECONDS", "86400"))
 CONVERSATION_MAX_ITEMS = int(os.getenv("CONVERSATION_MAX_ITEMS", "10000"))
 CONVERSATION_MAX_MESSAGES = int(os.getenv("CONVERSATION_MAX_MESSAGES", "40"))
+CONVERSATION_MAX_CHARS = int(os.getenv("CONVERSATION_MAX_CHARS", "20000"))
 
 # How long (seconds) to skip a key after it is rejected or rate-limited
 KEY_COOLDOWN_SECONDS = float(os.getenv("KEY_COOLDOWN_SECONDS", "60"))
 INVALID_KEY_COOLDOWN_SECONDS = float(os.getenv("INVALID_KEY_COOLDOWN_SECONDS", "3600"))
 # When every model is rate-limited, wait up to this long for one to free up before failing
 RATE_LIMIT_MAX_WAIT_SECONDS = float(os.getenv("RATE_LIMIT_MAX_WAIT_SECONDS", "10"))
+# How long to skip a provider whose server can't be reached (e.g. a local MORENA that's off)
+PROVIDER_DOWN_COOLDOWN_SECONDS = float(os.getenv("PROVIDER_DOWN_COOLDOWN_SECONDS", "30"))
 
 # Timeout (seconds) for calls to upstream services
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "30"))
+
+# Whole-request budgets. Every provider, retry and agent step shares one deadline.
+# 0 disables the deadline (and the upstream attempt cap).
+REQUEST_DEADLINE_SECONDS = float(os.getenv("REQUEST_DEADLINE_SECONDS", "55"))
+STREAM_DEADLINE_SECONDS = float(os.getenv("STREAM_DEADLINE_SECONDS", "120"))
+# /v1/chat/stream: at most one SSE keep-alive comment per STREAM_HEARTBEAT_SECONDS, so
+# idle proxies (Nginx, ALB, Cloudflare) don't cut a stream while a slow tool call runs.
+# 0 disables the comments.
+STREAM_HEARTBEAT_SECONDS = float(os.getenv("STREAM_HEARTBEAT_SECONDS", "15"))
+# Pending events a stream may hold while the client reads slowly. When the queue is
+# full, generation is blocked (backpressure) instead of growing memory without limit.
+# 0 removes the bound.
+STREAM_QUEUE_MAXSIZE = int(os.getenv("STREAM_QUEUE_MAXSIZE", "256"))
+# Maximum upstream requests (retries and fallbacks included) per HTTP request.
+REQUEST_MAX_UPSTREAM_ATTEMPTS = int(os.getenv("REQUEST_MAX_UPSTREAM_ATTEMPTS", "20"))
 
 # Retries for upstream 429/5xx responses and connection errors (0 disables).
 # Backoff is exponential with full jitter; a Retry-After header is honoured.
@@ -284,15 +331,102 @@ MAX_BATCH_CHARACTERS = int(os.getenv("MAX_BATCH_CHARACTERS", "50000"))
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
 CACHE_MAX_ITEMS = int(os.getenv("CACHE_MAX_ITEMS", "1000"))
 
+# Opt-in translation feedback. With REDIS_URL set, records are appended to a Redis list;
+# otherwise they are appended to this JSONL file. Keep the file out of version control.
+FEEDBACK_FILE = os.getenv("FEEDBACK_FILE", "feedback.jsonl")
+# Maximum number of feedback records kept. Redis drops the oldest records beyond the cap;
+# the JSONL file refuses new records when full. 0 disables the cap.
+FEEDBACK_MAX_RECORDS = int(os.getenv("FEEDBACK_MAX_RECORDS", "10000"))
+# Feedback records one caller (API key, or IP without API keys) may store per UTC day, so one
+# caller can't fill the store or flood the evaluation set (#140). 0 disables the limit.
+FEEDBACK_PER_KEY_PER_DAY = int(os.getenv("FEEDBACK_PER_KEY_PER_DAY", "200"))
+
 # Client authentication: comma-separated keys accepted in the X-API-Key header.
 # Leave empty to disable authentication (e.g. for local development).
 API_KEYS = [k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()]
 
+
+def _parse_api_key_quotas(value: str) -> Dict[str, int]:
+    """Parse `API_KEY_QUOTAS` ("key1:1000,key2:5000") into daily request limits"""
+    quotas: Dict[str, int] = {}
+    for item in value.split(","):
+        key, separator, limit = item.rpartition(":")
+        key, limit = key.strip(), limit.strip()
+        if not separator or not key or not limit:
+            if item.strip():
+                logging.getLogger(__name__).warning("Ignoring malformed API_KEY_QUOTAS entry")
+            continue
+        try:
+            daily_limit = int(limit)
+        except ValueError:
+            logging.getLogger(__name__).warning(
+                "Ignoring API_KEY_QUOTAS entry with a non-numeric limit"
+            )
+            continue
+        if daily_limit < 0:
+            logging.getLogger(__name__).warning(
+                "Ignoring API_KEY_QUOTAS entry with a negative limit"
+            )
+            continue
+        quotas[key] = daily_limit
+    return quotas
+
+
+# Optional daily request quotas per API key, counted per UTC day. Keys not listed are
+# unlimited. Quotas only apply when API_KEYS is configured.
+API_KEY_QUOTAS = _parse_api_key_quotas(os.getenv("API_KEY_QUOTAS", ""))
+# How long per-key usage counters are kept (two days covers the current and previous day)
+USAGE_TTL_SECONDS = int(os.getenv("USAGE_TTL_SECONDS", str(2 * 86400)))
+USAGE_MAX_ITEMS = int(os.getenv("USAGE_MAX_ITEMS", "10000"))
+
+# Who shares the translation cache. "global": every caller shares one cache (most quota
+# reuse). "key": each API key has its own cache, so one caller can't probe - via cache
+# timing - whether another caller recently translated a given text. The default is "key"
+# when keys are configured, "global" otherwise (there is no key to isolate by).
+_cache_scope_default = "key" if API_KEYS else "global"
+CACHE_SCOPE = os.getenv("CACHE_SCOPE", _cache_scope_default).strip().lower()
+if CACHE_SCOPE not in ("global", "key"):
+    raise ValueError(f"CACHE_SCOPE must be 'global' or 'key', got {CACHE_SCOPE!r}")
+
+# Optional dedicated bearer token for the Prometheus scrape endpoint. When set,
+# /metrics accepts "Authorization: Bearer <METRICS_TOKEN>" in place of an API key,
+# so the monitoring stack does not need (or leak) a key that can call the API.
+METRICS_TOKEN = os.getenv("METRICS_TOKEN", "")
+
+# Allows starting with API_KEYS empty (only for local development). In production,
+# leaving auth disabled is refused at startup (see main.check_authentication).
+ALLOW_UNAUTHENTICATED = os.getenv("ALLOW_UNAUTHENTICATED", "false").strip().lower() == "true"
+
+# Keying secret for personal identifiers (HMAC-SHA256): WhatsApp phone numbers and
+# IP-based conversation owners. Required — the app refuses to start without it, because
+# a plain unsalted hash of a phone number or an IP can be reversed by brute force.
+# Generate one with: python -c "import secrets; print(secrets.token_hex(32))"
+HASH_SECRET = os.getenv("HASH_SECRET", "")
+
 # Requests per minute allowed per client (API key or IP). 0 disables rate limiting.
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
 
+# Failed API-key attempts allowed per IP per minute (0 disables). Wrong or missing keys
+# are rate-limited by IP so guessing and log flooding are not free.
+AUTH_FAILURES_PER_MINUTE = int(os.getenv("AUTH_FAILURES_PER_MINUTE", "10"))
+
 # Comma-separated list of allowed CORS origins (empty disables CORS)
 CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+
+# WhatsApp bot (WhatsApp Cloud API by Meta). All four are needed to turn it on.
+WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
+# Verifies that webhooks really come from Meta (App settings -> Basic -> App secret)
+WHATSAPP_APP_SECRET = os.getenv("WHATSAPP_APP_SECRET", "")
+# Any random string; paste the same one into Meta's webhook settings
+WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "")
+WHATSAPP_GRAPH_URL = os.getenv("WHATSAPP_GRAPH_URL", "https://graph.facebook.com/v23.0").rstrip("/")
+# Facts the bot answers from (opening hours, services, prices, FAQs), and a first-time greeting
+WHATSAPP_CONTEXT = os.getenv("WHATSAPP_CONTEXT", "")
+WHATSAPP_WELCOME = os.getenv("WHATSAPP_WELCOME", "")
+# How long the bot remembers each person's language and conversation
+WHATSAPP_MEMORY_TTL_SECONDS = int(os.getenv("WHATSAPP_MEMORY_TTL_SECONDS", str(30 * 24 * 3600)))
+WHATSAPP_MAX_USERS = int(os.getenv("WHATSAPP_MAX_USERS", "10000"))
 
 # System prompt for conversations
 SYSTEM_PROMPT = """You are Terngi AI, a helpful, culturally aware assistant that specializes in multilingual conversations.

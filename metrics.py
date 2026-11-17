@@ -47,6 +47,38 @@ RATE_LIMITED = Counter(
     "terngi_rate_limited_requests_total",
     "Requests rejected with 429 by the rate limiter",
 )
+AUTH_FAILURES = Counter(
+    "terngi_auth_failures_total",
+    "Failed API-key authentications",
+    ["outcome"],
+)
+MODERATION_FLAGGED = Counter(
+    "terngi_moderation_flagged_total",
+    "User messages or tool results flagged by prompt-guard moderation",
+    ["kind"],
+)
+
+# Per-API-key usage (issue #47). Labels are short SHA-256 hashes, never the key itself.
+API_KEY_REQUESTS = Counter(
+    "terngi_api_key_requests_total",
+    "Requests handled, labelled by a hash of the API key",
+    ["key"],
+)
+API_KEY_UPSTREAM_CALLS = Counter(
+    "terngi_api_key_upstream_requests_total",
+    "Upstream calls, labelled by a hash of the API key",
+    ["key"],
+)
+API_KEY_TOKENS = Counter(
+    "terngi_api_key_tokens_total",
+    "Provider-reported tokens, labelled by a hash of the API key",
+    ["key", "kind"],
+)
+API_QUOTA_EXCEEDED = Counter(
+    "terngi_api_key_quota_exceeded_total",
+    "Requests rejected because the API key's daily quota was exhausted",
+    ["key"],
+)
 
 P = ParamSpec("P")
 T = TypeVar("T")

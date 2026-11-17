@@ -1,9 +1,15 @@
 """
-Tests for security headers and the request body size limit
+Tests for security headers, request body limits and trusted proxy headers
 """
 
+import httpx
+import pytest
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
 import config
+import main
 import middleware
+from services import conversations
 
 
 def test_security_headers_on_api_responses(client):
@@ -27,12 +33,67 @@ def test_security_headers_on_rejected_requests(client, monkeypatch):
     assert response.headers["X-Content-Type-Options"] == "nosniff"
 
 
-def test_chat_page_csp_allows_its_inline_ui_only(client):
+def test_non_ascii_api_key_returns_401_instead_of_500(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["secret"])
+    payload = {"content": "Hi", "from_language": "en", "to_language": "yo"}
+
+    missing = client.post("/v1/translate", json=payload)
+    # Real clients send raw header bytes, which servers decode as Latin-1
+    garbage = client.post(
+        "/v1/translate",
+        json=payload,
+        headers={"X-API-Key": "clé".encode("latin-1")},
+    )
+
+    assert missing.status_code == 401
+    assert garbage.status_code == 401
+    assert garbage.json()["error"] is True
+    assert "Internal server error" not in garbage.text
+
+
+def test_rate_limit_id_handles_non_ascii_keys_without_crashing(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(config, "API_KEYS", ["secret"])
+
+    class FakeRequest:
+        headers = {"x-api-key": "clé"}
+        client = SimpleNamespace(host="127.0.0.1")
+
+    # Not a valid key, so the IP bucket is used; the key never reaches compare_digest
+    assert middleware.rate_limit_id(FakeRequest()) == "ip:127.0.0.1"
+
+
+def test_chat_page_csp_loads_its_assets_only(client):
     csp = client.get("/chat").headers["Content-Security-Policy"]
 
-    assert "script-src 'self' 'unsafe-inline'" in csp
+    assert "script-src 'self'" in csp
+    assert "style-src 'self'" in csp
+    assert "unsafe-inline" not in csp
     assert "connect-src 'self'" in csp
     assert "frame-ancestors 'none'" in csp
+
+
+def test_chat_assets_are_served(client):
+    js = client.get("/static/chat.js")
+    css = client.get("/static/chat.css")
+
+    assert js.status_code == 200
+    assert "javascript" in js.headers["content-type"]
+    assert css.status_code == 200
+    assert "css" in css.headers["content-type"]
+
+
+def test_chat_assets_are_public_when_auth_is_configured(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["secret"])
+
+    assert client.get("/static/chat.js").status_code == 200
+    assert client.get("/static/chat.css").status_code == 200
+
+
+def test_unknown_static_files_are_not_served(client):
+    assert client.get("/static/config.py").status_code == 404
+    assert client.get("/static/nope.js").status_code == 404
 
 
 def test_docs_keep_working_without_csp(client):
@@ -50,6 +111,50 @@ def test_hsts_over_https():
     response = TestClient(app, base_url="https://testserver").get("/health")
 
     assert response.headers["Strict-Transport-Security"] == "max-age=31536000"
+
+
+def test_startup_refuses_unauthenticated_mode_without_the_flag(monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", [])
+    monkeypatch.setattr(config, "ALLOW_UNAUTHENTICATED", False)
+
+    with pytest.raises(SystemExit) as exc:
+        main.check_authentication()
+
+    assert "API_KEYS is empty" in str(exc.value)
+
+
+def test_startup_allows_unauthenticated_mode_with_the_flag(monkeypatch, caplog):
+    import logging
+
+    monkeypatch.setattr(config, "API_KEYS", [])
+    monkeypatch.setattr(config, "ALLOW_UNAUTHENTICATED", True)
+
+    with caplog.at_level(logging.WARNING, logger="main"):
+        main.check_authentication()
+
+    assert any("authentication is disabled" in record.message for record in caplog.records)
+
+
+def test_ready_reports_auth_enabled(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", ["secret"])
+
+    response = client.get("/health/ready", headers={"X-API-Key": "secret"})
+
+    assert response.status_code == 200
+    assert response.json()["services"]["auth"] is True
+
+
+def test_ready_reports_auth_disabled(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEYS", [])
+    monkeypatch.setattr(config, "ALLOW_UNAUTHENTICATED", True)
+
+    # Auth off: readiness stays "ready", and with no keys configured the service
+    # details are shown to everyone, since there is nothing to protect
+    response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
+    assert response.json()["services"]["auth"] is False
 
 
 def test_oversized_body_is_rejected(client):
@@ -90,3 +195,48 @@ def test_normal_body_is_accepted(client):
     )
 
     assert response.status_code == 200
+
+
+async def _chat_owners(monkeypatch, peer: str, forwarded_for: str):
+    """Run /v1/chat through uvicorn's proxy middleware and return the owners it used"""
+    from main import app
+
+    owners = []
+
+    async def fake_create(owner):
+        owners.append(owner)
+        return "test-conversation"
+
+    async def fake_append(*args, **kwargs):
+        return None
+
+    async def fake_run_agent(*args, **kwargs):
+        return {"answer": "ok", "language": "en", "reply_language": "en", "steps": []}
+
+    monkeypatch.setattr(conversations, "create", fake_create)
+    monkeypatch.setattr(conversations, "append", fake_append)
+    monkeypatch.setattr("routes.chat.run_agent", fake_run_agent)
+
+    proxy = ProxyHeadersMiddleware(app, trusted_hosts="127.0.0.1")
+    transport = httpx.ASGITransport(app=proxy, client=(peer, 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        response = await http.post(
+            "/v1/chat",
+            json={"message": "Hi", "language": "en"},
+            headers={"X-Forwarded-For": forwarded_for},
+        )
+
+    assert response.status_code == 200
+    return owners
+
+
+async def test_trusted_proxy_resolves_the_forwarded_client(monkeypatch):
+    owners = await _chat_owners(monkeypatch, "127.0.0.1", "203.0.113.9")
+
+    assert owners == ["ip:203.0.113.9"]
+
+
+async def test_untrusted_peer_cannot_spoof_forwarded_for(monkeypatch):
+    owners = await _chat_owners(monkeypatch, "198.51.100.7", "203.0.113.9")
+
+    assert owners == ["ip:198.51.100.7"]

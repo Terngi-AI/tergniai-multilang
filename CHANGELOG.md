@@ -5,7 +5,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-17
+
+### Changed
+- **Python 3.11 or newer is now required.** Python 3.10 reaches end of life in October 2026,
+  and the fixes for six `filelock` advisories (GHSA-v4x8-3wr5-3wq8 and others, a
+  development-only dependency) need Python 3.11+. CI tests Python 3.11–3.13. The Python
+  client in `clients/python` still supports 3.10.
+
 ### Security
+- **Feedback limits per key** (#140): each API key may store `FEEDBACK_PER_KEY_PER_DAY`
+  feedback records per UTC day (default 200; `429` with `Retry-After` beyond that), and the
+  same rating of the same translation sent again on the same day is ignored
+  (`{"status": "duplicate"}`). One key can no longer fill the shared store or flood the
+  evaluation set. Records sent with a key carry a `submitter` label, a keyed one-way hash
+  made only for feedback, so junk can be filtered out later.
+- `filelock` upgraded to 4.2.4 (GHSA-2g95-wg33-c5x2, GHSA-567q-5qvw-pf92,
+  GHSA-9vhv-jxww-xfm5, GHSA-crv4-6mhj-j5jh, GHSA-jqc4-5cvw-7w85, GHSA-v4x8-3wr5-3wq8).
+
+### Added
+- **Release images** (#16): pushing a `v*` tag builds `linux/amd64` and `linux/arm64`
+  images on GHCR (`ghcr.io/terngi-ai/tergniai-multilang`) and creates a GitHub Release
+  with notes from `CHANGELOG.md`.
+- **WhatsApp bot** (`/v1/whatsapp/webhook`): people message your WhatsApp number in any
+  supported language and get answers in that language from the agent, with memory (in
+  memory or Redis). Commands: `LANGUAGE`, `RESET`, `HELP`. Webhooks are verified by Meta's
+  signature, repeated deliveries are answered once, phone numbers are stored as hashes.
+  `WHATSAPP_CONTEXT` gives the bot facts to answer from. See `docs/WHATSAPP.md`
+- `POST /v1/whatsapp/send`: send text (optionally translated) or an approved template
+- The agent accepts an optional `context` with facts from the operator
+
+### Security
+- `certifi` upgraded to 2026.10.19 (PYSEC-2026-4320).
 - **Security workflow** on every PR and daily: ClamAV malware scan, Semgrep static analysis,
   pip-audit + OSV-Scanner dependency audits, Trivy image/Dockerfile scan, and an OWASP ZAP attack
   simulation against the running API. OpenSSF Scorecard runs weekly.
@@ -22,6 +53,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Dependabot. Dependency vulnerabilities are caught by the daily security scan instead.
 
 ### Added
+- **Streaming chat** (#10): `POST /v1/chat/stream` sends the reply as Server-Sent Events
+  (`start`, `token`, `discard`, `tool`, `done`, `error`) while it's generated; the web chat now
+  shows replies word by word and which tool is running. Fallback to another model still works
+  until the first token.
+- **Redis backend** (#11): set `REDIS_URL` to share the translation cache, rate limits and chat
+  conversations between replicas and keep conversations across restarts. Falls back to
+  in-memory state when unset. If Redis is down, translation works without the cache and the
+  rate limiter fails open; chat returns `503`. `/health/ready` reports `storage`.
+  `docker compose up` now starts Redis too.
 - Prometheus metrics at `GET /metrics`: requests by route and status, latency, upstream
   calls per provider, translation cache hits/misses and rate-limited requests (#35).
 - Retries with exponential backoff and jitter for transient upstream errors, honouring
@@ -60,6 +100,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `GROQ_SYSTEM_PROMPT` is now `SYSTEM_PROMPT`.
 
 ### Fixed
+- A provider whose server can't be reached (e.g. MORENA switched off) is skipped for
+  `PROVIDER_DOWN_COOLDOWN_SECONDS` (30s) instead of being retried on every request.
+- Single texts are translated as plain text instead of strict JSON, which some providers
+  rejected for long outputs (`Failed to validate JSON`), wasting several seconds per request.
 - Translation results were cached in two places after #32 landed on top of #34/#35, so stale
   translations leaked between requests and 26 tests failed on `develop`. There is now one cache.
 - Unhandled exceptions are counted as `500` in the request metrics.

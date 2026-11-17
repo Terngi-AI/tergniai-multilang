@@ -4,28 +4,45 @@
 [![Security](https://github.com/Terngi-AI/tergniai-multilang/actions/workflows/security.yml/badge.svg)](https://github.com/Terngi-AI/tergniai-multilang/actions/workflows/security.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Terngi-AI/tergniai-multilang/badge)](https://scorecard.dev/viewer/?uri=github.com/Terngi-AI/tergniai-multilang)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Python](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue)
+![Python](https://img.shields.io/badge/python-3.11%E2%80%933.13-blue)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Good first issues](https://img.shields.io/github/issues/Terngi-AI/tergniai-multilang/good%20first%20issue?label=good%20first%20issues&color=7057ff)](https://github.com/Terngi-AI/tergniai-multilang/labels/good%20first%20issue)
 [![GitHub stars](https://img.shields.io/github/stars/Terngi-AI/tergniai-multilang?style=social)](https://github.com/Terngi-AI/tergniai-multilang/stargazers)
 
-**Open-source translation and AI conversation for Nigerian languages.**
+**Open-source translation and AI conversation in 96 languages.**
 
-A **conversational AI** and translation API for **96 languages**, built
-African-first: Yoruba, Hausa, Igbo, Nigerian Pidgin, Swahili, Amharic, isiZulu and 20 more
-African languages, plus Arabic, Chinese, Spanish, French, Hindi, Japanese, Polish, Dutch, Irish
-and the other major world languages. It can use several providers at once:
+A **conversational AI** and translation API that speaks to people in the language they
+understand: widely spoken world languages and the local languages most software still
+leaves out. It covers languages across Africa, Europe, the Middle East and Asia, from
+Spanish, Arabic, Hindi and Chinese to Swahili, Tigrinya, Welsh, Pashto and Khmer. See the full
+list with `GET /v1/languages`.
+
+It can use several providers at once:
 [Azure Translator](https://learn.microsoft.com/azure/ai-services/translator/),
 [Groq](https://groq.com/) or any OpenAI-compatible API, and
-[MORENA](https://huggingface.co/vamboai/morena-1.5b-instruct), an open African-language model
-you can run for free.
+[MORENA](https://huggingface.co/vamboai/morena-1.5b-instruct), an open model for local
+languages that you can run for free.
 
 ## Why this project?
 
-More than 100 million people speak Yoruba, Hausa or Igbo, yet these languages are still
-poorly served by most software. Terngi AI gives developers a simple, self-hostable API to
-build apps, chatbots and services that speak to people in their own language, and it is
-built in the open so native speakers and developers can improve it together.
+Help often exists, but language decides who gets it. A patient at a pharmacy, a parent
+reading a letter from school, a customer calling their bank: when the message isn't in a
+language they understand, it doesn't reach them. Hundreds of millions of people speak languages that
+most software serves poorly or not at all.
+
+Terngi AI gives developers a simple, self-hostable API to build apps, chatbots and services
+that speak to people in their own language, in health, education, finance, customer support,
+travel and public services. It is built in the open, so native speakers and developers
+anywhere can improve it together.
+
+### Languages
+
+| Region | Languages |
+|---|---|
+| Africa (27) | Swahili, Yoruba, Hausa, Igbo, Nigerian Pidgin, Amharic, Somali, Tigrinya, Oromo, isiZulu, isiXhosa, Shona, Kinyarwanda, Wolof, Twi and more |
+| Europe (32) | English, French, Spanish, Portuguese, German, Italian, Polish, Romanian, Ukrainian, Irish, Welsh and more |
+| Middle East (6) | Arabic, Hebrew, Persian, Urdu, Pashto, Kurdish |
+| Asia (31) | Chinese, Cantonese, Japanese, Korean, Hindi, Bengali, Punjabi, Tamil, Vietnamese, Indonesian, Filipino, Khmer and more |
 
 ⭐ **If this is useful to you, star the repo** — it helps more people find it.
 
@@ -38,13 +55,20 @@ built in the open so native speakers and developers can improve it together.
   the scenes, see [docs/AGENT.md](docs/AGENT.md)
 - **Multiple providers, models and keys** — Azure, Groq, OpenRouter, Together, Cerebras,
   Hugging Face, Ollama or MORENA, tried in order; keys rotate and failing keys, models or
-  providers are skipped automatically
-- **Free, local African-language model** — run [MORENA](docs/MORENA.md) with llama.cpp
+  providers are skipped automatically. Which user data each provider receives, and its
+  retention and training terms: [docs/DATA.md](docs/DATA.md)
+- **WhatsApp bot**: people message your WhatsApp number in any supported language and get
+  answers in that language, with memory; plus an endpoint to send messages. See
+  [docs/WHATSAPP.md](docs/WHATSAPP.md)
+- **Free, local model** — run [MORENA](docs/MORENA.md) with llama.cpp for its 14 languages, no API keys needed
 - **Translate** text between any two supported languages, one at a time or in batches
 - **Auto-detect** the source language — pass `"from_language": "auto"` to any endpoint
 - **Converse** in any supported language; the reply comes back in the target language,
   with optional multi-turn memory (`memory_context`)
 - **Translation cache** (in-memory TTL/LRU) to save quota on repeated phrases
+- **Opt-in feedback** for building an open translation evaluation set
+- **Data access and deletion** - export a conversation or delete all your chats; see
+  [docs/PRIVACY.md](docs/PRIVACY.md)
 - **API-key authentication** (`X-API-Key`) and **per-client rate limiting**
 - **Request IDs** (`X-Request-ID`) and timing headers for tracing
 - Input validation, upstream timeouts and consistent JSON error responses
@@ -55,7 +79,7 @@ built in the open so native speakers and developers can improve it together.
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - At least one provider: a [Groq API key](https://console.groq.com/keys) (free tier),
   [MORENA running locally](docs/MORENA.md) (free), an Azure Translator key, or any
   OpenAI-compatible API
@@ -68,8 +92,11 @@ cd tergniai-multilang
 python -m venv .venv && source .venv/bin/activate
 pip install --require-hashes -r requirements-dev.lock
 
-cp .env.example .env   # then fill in your keys
+cp .env.example .env   # then fill in your keys, and set API_KEYS
+# Required: a secret for hashing phone numbers and IPs
+python -c "import secrets; print('HASH_SECRET=' + secrets.token_hex(32))" >> .env
 uvicorn main:app --reload
+# For a quick local try without keys: ALLOW_UNAUTHENTICATED=true uvicorn main:app --reload
 ```
 
 Open **http://localhost:8000/chat** to chat in your browser, or
@@ -81,6 +108,25 @@ http://localhost:8000/docs for the interactive API docs.
 docker build -t terngi-ai .
 docker run --rm -p 8000:8000 --env-file .env terngi-ai
 ```
+
+### Run with Docker Compose (API + Redis)
+
+```bash
+docker compose up
+```
+
+Starts the API with Redis, so the cache, rate limits and chat conversations are shared and
+survive API container restarts. The Redis service runs **without persistence** (no RDB
+snapshots, no AOF, no volume): everything it holds is short-lived by design, and we do not
+want chat text written to disk where it would outlive the keys' TTL. For longer-lived
+shared storage, point `REDIS_URL` at an external Redis you manage. The Redis service also
+has a 512 MB `volatile-lru` limit as a safety net; conversation storage independently
+enforces `CONVERSATION_MAX_ITEMS`.
+
+### Deploy a public demo
+
+See [docs/DEPLOY.md](docs/DEPLOY.md) for current free/cheap hosting options (Render,
+Hugging Face Spaces, Fly.io), secret/rate-limit settings, and free-tier caveats.
 
 ### Run with MORENA (free, no API keys needed)
 
@@ -109,27 +155,53 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `DETECTION_PROVIDERS` | no | `azure` + LLM providers except MORENA | Providers used for language detection |
 | `AGENT_PROVIDERS` | no | OpenAI-compatible chat providers | Providers that run the agent (must support tool calling) |
 | `AGENT_MAX_STEPS` | no | `6` | Max model turns per agent request |
+| `AGENT_MAX_TOKENS` | no | `1500` | Max tokens per agent model call (bounds the cost of a multi-step request) |
 | `CONVERSATION_TTL_SECONDS` | no | `86400` | How long chats are remembered after the last message |
+| `CONVERSATION_MAX_ITEMS` | no | `10000` | Maximum conversations kept; the least recently written are evicted first |
 | `CONVERSATION_MAX_MESSAGES` | no | `40` | Messages kept per conversation |
+| `CONVERSATION_MAX_CHARS` | no | `20000` | Characters of history kept per conversation; the oldest turns are dropped first |
+| `REDIS_URL` | no | *(in-memory)* | Redis for shared cache, rate limits and conversations, e.g. `redis://localhost:6379/0` |
+| `REDIS_PREFIX` | no | `terngi:` | Prefix for every Redis key |
+| `REDIS_TIMEOUT` | no | `2` | Redis connect/read timeout in seconds |
+| `PROVIDER_DOWN_COOLDOWN_SECONDS` | no | `30` | How long to skip a provider whose server can't be reached |
 | `RATE_LIMIT_MAX_WAIT_SECONDS` | no | `10` | When every model is rate-limited, wait this long for one to free up |
 | `<NAME>_LANGUAGES` | no | all (MORENA: its 14) | Restrict a provider to certain languages |
 | `KEY_COOLDOWN_SECONDS` | no | `60` | How long to skip a rate-limited key |
 | `INVALID_KEY_COOLDOWN_SECONDS` | no | `3600` | How long to skip a rejected key |
 | `REQUEST_TIMEOUT` | no | `30` | Upstream timeout in seconds |
+| `REQUEST_DEADLINE_SECONDS` | no | `55` | Whole-request wall-clock budget for JSON responses; retries, fallbacks and agent steps share it (`0` disables) |
+| `STREAM_DEADLINE_SECONDS` | no | `120` | Whole-request budget for streaming responses (`0` disables) |
+| `STREAM_HEARTBEAT_SECONDS` | no | `15` | `/v1/chat/stream` sends an SSE keep-alive comment at most this often, so idle proxies don't cut long streams (`0` disables) |
+| `STREAM_QUEUE_MAXSIZE` | no | `256` | Pending events per stream; a client that reads slowly pauses generation (backpressure) instead of growing memory (`0` removes the bound) |
+| `REQUEST_MAX_UPSTREAM_ATTEMPTS` | no | `20` | Maximum upstream requests per API request, retries and fallbacks included (`0` disables) |
 | `UPSTREAM_MAX_RETRIES` | no | `2` | Retries for upstream `5xx`/connection errors (all providers) and Azure `429`s; `0` disables. LLM `429`s rotate to the next key or model instead |
 | `UPSTREAM_RETRY_BASE_DELAY` | no | `0.5` | First backoff step in seconds; doubles each retry, with full jitter |
 | `UPSTREAM_RETRY_MAX_DELAY` | no | `10` | Longest wait between retries; a longer `Retry-After` fails fast |
 | `MAX_CONTENT_LENGTH` | no | `5000` | Max characters per message |
 | `MAX_MEMORY_MESSAGES` | no | `20` | Max turns in `memory_context` |
 | `API_KEYS` | no | *(auth disabled)* | Comma-separated client keys accepted in `X-API-Key` |
+| `API_KEY_QUOTAS` | no | *(unlimited)* | Optional daily request quotas per key, e.g. `key1:1000,key2:5000`; over-quota requests get `429` |
+| `USAGE_TTL_SECONDS` | no | `172800` | How long per-key usage counters are kept (two days) |
+| `USAGE_MAX_ITEMS` | no | `10000` | Maximum per-key usage entries kept |
+| `METRICS_TOKEN` | no | *(off)* | Optional dedicated bearer token for `/metrics` (`Authorization: Bearer ...`), so the monitoring stack needs no API key |
+| `HASH_SECRET` | **yes** | - | Keying secret (HMAC-SHA256) for personal identifiers: WhatsApp phone numbers and IP-based conversation owners. The app refuses to start without it; generate one with `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `ALLOW_UNAUTHENTICATED` | no | `false` | Permit startup with `API_KEYS` empty (local development only; the app refuses to start otherwise) |
+| `WHATSAPP_*` | no | *(off)* | WhatsApp bot settings, see [docs/WHATSAPP.md](docs/WHATSAPP.md) |
 | `RATE_LIMIT_PER_MINUTE` | no | `60` | Requests per minute per client; `0` disables |
+| `AUTH_FAILURES_PER_MINUTE` | no | `10` | Failed API-key attempts allowed per IP per minute; `0` disables |
 | `CACHE_TTL_SECONDS` | no | `3600` | Translation cache lifetime; `0` disables |
 | `CACHE_MAX_ITEMS` | no | `1000` | Max cached translations |
+| `CACHE_SCOPE` | no | `key` when `API_KEYS` is set, else `global` | `key`: each API key has its own translation cache, so one caller can't tell (from cache timing) whether another caller recently translated a text. `global`: one shared cache for everyone - more quota reuse, no isolation |
 | `MAX_BATCH_SIZE` | no | `25` | Max texts per batch request |
 | `MAX_BATCH_CHARACTERS` | no | `50000` | Max total characters per batch |
 | `MAX_REQUEST_BYTES` | no | `1048576` | Largest request body accepted; bigger requests get `413` |
+| `MODERATION_PROVIDERS` | no | *(disabled)* | LLM providers that serve the prompt-guard classifier; empty disables moderation |
+| `PROMPT_GUARD_MODEL` | no | `meta-llama/llama-prompt-guard-2-86m` | Classifier model for chat/agent moderation; does not need to be listed in a provider's MODELS, and is never tried as a chat fallback |
+| `MODERATION_THRESHOLD` | no | `0.5` | Score at or above which the classifier's probability counts as an injection |
+| `MODERATION_FAIL_MODE` | no | `open` | What happens if the classifier is unreachable: `open` lets the request through, `closed` refuses with `503` |
 | `CORS_ORIGINS` | no | *(disabled)* | Comma-separated allowed origins |
-| `LOG_LEVEL` | no | `INFO` | Python log level |
+| `FORWARDED_ALLOW_IPS` | no | `127.0.0.1,::1` | Proxy IPs/CIDRs trusted to set `X-Forwarded-For` |
+| `LOG_LEVEL` | no | `INFO` | Python log level. Upstream error *bodies* are only logged at `DEBUG` (they can echo user text); `INFO` logs the status, error code and request ID |
 
 \* You need at least one provider. Built-in provider names are `groq`, `openrouter`,
 `together`, `cerebras`, `huggingface`, `openai`, `ollama` and `morena`; any other name works
@@ -140,6 +212,21 @@ each model is tried in order, and keys rotate between requests. A key that is re
 (401/403) or rate-limited (429) is skipped for a while; a model that errors or returns
 unusable output is skipped for that request. The app starts without keys; endpoints with
 no configured provider return `503`.
+
+**Moderation:** when `MODERATION_PROVIDERS` is set, user messages and agent tool results
+are classified before the chat model sees them. Groq answers the classifier with a
+probability score (near 1 = injection), compared against `MODERATION_THRESHOLD`;
+label-based answers ("INJECTION"/"MALICIOUS") from other deployments are matched as a
+fallback. The guard model does not need to be listed in the provider's MODELS and is
+never tried as a chat fallback: a guard verdict is not an answer. Note that Prompt Guard
+2 has a 512-token context, so only the beginning of very long messages is classified.
+
+JSON requests share one `REQUEST_DEADLINE_SECONDS` wall-clock budget and one
+`REQUEST_MAX_UPSTREAM_ATTEMPTS` cap across retries, provider fallbacks and agent steps.
+Streaming responses use `STREAM_DEADLINE_SECONDS`. Exhausting the deadline returns `504`;
+exhausting the attempt cap returns `503`, both with `Retry-After`. The WhatsApp webhook is
+excluded from the hard request deadline because Meta must get an immediate answer; each
+background reply starts its own `REQUEST_DEADLINE_SECONDS` budget.
 
 Example, using two Groq keys, OpenRouter as a backup and MORENA for translation:
 
@@ -152,41 +239,86 @@ OPENROUTER_MODELS=meta-llama/llama-3.3-70b-instruct
 TRANSLATION_PROVIDERS=morena,groq,openrouter
 ```
 
+### Running behind a reverse proxy
+
+Set `FORWARDED_ALLOW_IPS` to the proxy's IPs or CIDRs (comma-separated), for example the
+ALB/Nginx address or the Docker network subnet. Uvicorn trusts `X-Forwarded-For` only from
+those peers; requests from anywhere else keep their direct peer address, so a client cannot
+spoof its identity. Without this setting, every anonymous client behind the proxy shares one
+rate-limit bucket and one conversation owner. Do not use `*` unless the API port is reachable
+only through the proxy.
+
 ## API
 
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/` | API info and supported languages |
 | `GET` | `/health` | Liveness probe |
-| `GET` | `/health/ready` | Readiness probe (are upstream keys configured?) |
-| `GET` | `/metrics` | Prometheus metrics |
+| `GET` | `/health/ready` | Readiness probe (public status; per-service details require a key) |
+| `GET` | `/metrics` | Prometheus metrics (requires a key or `METRICS_TOKEN` when auth is on) |
 | `GET` | `/v1/languages` | Supported language codes |
+| `GET` | `/v1/usage` | Daily usage for the calling API key (requests, upstream calls, tokens, quota) |
 | `POST` | `/v1/translate` | Translate text |
 | `POST` | `/v1/translate/batch` | Translate up to 25 texts in one request |
 | `POST` | `/v1/detect` | Detect the language of a text |
+| `POST` | `/v1/feedback` | Rate a translation or chat reply (opt-in) |
 | `POST` | `/v1/converse` | Translate and get an LLM reply |
 | `POST` | `/v1/agent` | The assistant without server memory (send `history` yourself) |
 | `POST` | `/v1/chat` | **Chat** with memory: send `message` and `conversation_id` |
+| `POST` | `/v1/chat/stream` | The same chat, streamed word by word as Server-Sent Events |
 | `GET` / `DELETE` | `/v1/chat/{id}` | Read or forget a conversation |
+| `GET` | `/v1/chat/{id}/export` | Download a conversation as a JSON file |
+| `DELETE` | `/v1/chat` | Delete every conversation belonging to the caller (requires a valid API key) |
 | `GET` | `/chat` | Web chat page |
 
 📖 **Full usage guide with curl, Python and JavaScript examples: [docs/USAGE.md](docs/USAGE.md)**
 
 ### Authentication & rate limits
 
+> **Upgrading:** the app now refuses to start in two cases. Set both before upgrading:
+> - `API_KEYS` empty, because every endpoint would be public. Set `API_KEYS`, or
+>   `ALLOW_UNAUTHENTICATED=true` for local development only.
+> - `HASH_SECRET` empty. Stored WhatsApp memory and chat ownership are keyed with it,
+>   so existing ones are forgotten once, which is safe because they expire anyway.
+
 When `API_KEYS` is set, every `/v1/*` endpoint except `/v1/languages` requires an
 `X-API-Key` header. Each client (API key, or IP address when no key is sent) may make
 `RATE_LIMIT_PER_MINUTE` requests per minute. Responses include `X-RateLimit-Limit` and
 `X-RateLimit-Remaining`; when exceeded you get `429` with a `Retry-After` header.
 
-> The cache and rate limiter are in-memory, so each server process keeps its own state.
-> Run behind a shared limiter (e.g. your API gateway) if you scale out to many replicas.
+When `API_KEYS` is set, every request is also counted per API key, and
+`API_KEY_QUOTAS` can impose a daily request quota per key (reset at UTC midnight). Over
+quota, requests are answered with `429` and `Retry-After` set to the reset time, before
+any upstream work happens. `GET /v1/usage` returns the counters for the calling key
+(requests, upstream calls, provider-reported tokens) plus quota status. In `/metrics`,
+per-key labels are SHA-256 hashes of the keys, never the keys themselves.
+
+> By default the cache, rate limiter and chat conversations live in each server process's
+> memory. Set `REDIS_URL` to share them between replicas (`docker compose up` does this
+> for you; the compose Redis runs without persistence, so nothing is written to disk).
+> If you point it at an external Redis with persistence enabled, conversation text will
+> be written to that server's disk and backups: you then own its encryption at rest and
+> backup retention.
+
+The translation cache is also shared between callers unless `CACHE_SCOPE=key` (the default
+when `API_KEYS` is set), which gives each API key its own cache. The shared cache reuses
+quota more; the per-key cache stops one caller from inferring, via cache timing, what
+another caller translated recently.
 
 ### Metrics
 
-`GET /metrics` serves Prometheus metrics. Like the health checks, it needs no API key
-and isn't rate limited, so keep it off the public internet (for example, only expose it on
-your internal network or block it at the reverse proxy).
+`GET /metrics` serves Prometheus metrics. When `API_KEYS` is configured, scraping requires a
+valid `X-API-Key` — or, better, a dedicated `METRICS_TOKEN` sent as
+`Authorization: Bearer <token>`, so the monitoring stack holds no key that can call the
+API. Without `API_KEYS` (local development) the endpoint is public. It is never rate
+limited. Scrape example:
+
+```
+http_get:
+  url: http://terngi:8000/metrics
+  headers:
+    Authorization: "Bearer <METRICS_TOKEN>"
+```
 
 | Metric | Labels | Description |
 |---|---|---|
@@ -196,6 +328,12 @@ your internal network or block it at the reverse proxy).
 | `terngi_upstream_request_duration_seconds` | `service` | Upstream latency histogram |
 | `terngi_translation_cache_lookups_total` | `result` (`hit`/`miss`) | Translation cache lookups, one per text |
 | `terngi_rate_limited_requests_total` | — | Requests rejected by the rate limiter |
+| `terngi_auth_failures_total` | `outcome` (`invalid`/`throttled`) | Invalid API keys, and failed attempts throttled by the per-IP limiter |
+| `terngi_api_key_requests_total` | `key` (hash) | Requests handled per API key |
+| `terngi_api_key_upstream_requests_total` | `key` (hash) | Upstream calls per API key |
+| `terngi_api_key_tokens_total` | `key` (hash), `kind` (`prompt`/`completion`) | Provider-reported tokens per API key |
+| `terngi_api_key_quota_exceeded_total` | `key` (hash) | Requests rejected because the key's daily quota was exceeded |
+| `terngi_moderation_flagged_total` | `kind` (`user_message`/`tool_result`) | User messages or tool results flagged by prompt-guard moderation |
 
 `route` is the route template (e.g. `/v1/translate`), or `unmatched` for unknown paths,
 so label values stay bounded. Metrics are per process, like the cache and rate limiter.
@@ -215,6 +353,31 @@ curl -X POST http://localhost:8000/v1/translate/batch \
   -H 'Content-Type: application/json' -H 'X-API-Key: <your-key>' \
   -d '{"texts": ["Good morning", "Thank you"], "from_language": "en", "to_language": "ig"}'
 ```
+
+### Glossary
+
+Both translation endpoints accept an optional `glossary`: a map of source terms to a
+translation for every target language (`"Terngi": "Terngi"`) or to per-language translations
+(`"mobile money": {"ha": "kudin waya", "yo": "owo alagbeka"}`). A term mapped to itself is
+protected from translation; entries for other target languages are ignored.
+
+```bash
+curl -X POST http://localhost:8000/v1/translate \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "content": "Welcome to Terngi, where you can pay with mobile money",
+    "from_language": "en",
+    "to_language": "ha",
+    "glossary": {
+      "Terngi": "Terngi",
+      "mobile money": {"ha": "kudin waya"}
+    }
+  }'
+```
+
+Azure Translator receives the terms as dynamic-dictionary markup, language models get them in
+the prompt and MORENA uses placeholders around protected terms. The glossary is part of the
+cache key, so the same text with different glossaries is translated and cached separately.
 
 ### Detect language
 
@@ -266,6 +429,16 @@ curl -X POST http://localhost:8000/v1/converse \
       }'
 ```
 
+### WhatsApp
+
+Connect a WhatsApp number and Terngi AI answers people there in their own language. Setup,
+commands and sending: [docs/WHATSAPP.md](docs/WHATSAPP.md).
+
+```bash
+curl -X POST http://localhost:8000/v1/whatsapp/send -H 'Content-Type: application/json' \
+  -d '{"to": "+447700900123", "text": "Your order is ready.", "to_language": "yo"}'
+```
+
 Errors use one shape:
 
 ```json
@@ -281,7 +454,7 @@ config.py            Settings loaded from environment variables
 models.py            Pydantic request/response models
 routes/              HTTP endpoints
 services/            Providers (Azure, LLMs, MORENA), key rotation, cache, language helpers
-docs/                Usage guide, agent design, running MORENA
+docs/                Usage guide, agent design, privacy, running MORENA
 tests/               Pytest suite (upstream services are mocked)
 ```
 
@@ -294,7 +467,7 @@ mypy .
 pre-commit install    # run checks automatically on every commit
 ```
 
-CI runs lint, type checks, tests on Python 3.10–3.13 and a Docker smoke test on every pull
+CI runs lint, type checks, tests on Python 3.11–3.13 and a Docker smoke test on every pull
 request. A separate security workflow scans for malware, secrets, insecure code, vulnerable
 dependencies and container issues, and runs simulated attacks against the API, on every PR and
 daily. See [SECURITY.md](SECURITY.md#automated-security-scanning).
@@ -304,7 +477,7 @@ daily. See [SECURITY.md](SECURITY.md#automated-security-scanning).
 Contributions of every size are welcome, and you don't need to be an expert:
 
 - 🟢 **New here?** Pick a [good first issue](https://github.com/Terngi-AI/tergniai-multilang/labels/good%20first%20issue).
-- 🗣️ **Speak Yoruba, Hausa, Igbo or another Nigerian language?** Help review translations
+- 🗣️ **Speak a language other than English?** Help review translations in your language
   and build our [evaluation set](https://github.com/Terngi-AI/tergniai-multilang/labels/languages). Native speakers are our most valuable contributors.
 - 🛠️ **Experienced developer?** See [help wanted](https://github.com/Terngi-AI/tergniai-multilang/labels/help%20wanted) for streaming, Redis, speech and more.
 - 💬 **Questions or ideas?** Start a conversation in [Discussions](https://github.com/Terngi-AI/tergniai-multilang/discussions).

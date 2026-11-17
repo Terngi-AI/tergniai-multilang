@@ -20,7 +20,7 @@ from services.translator import detect_language, translate_batch, translate_text
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["translation"])
 
 
 @router.post("/v1/translate", response_model=TranslationResponse)
@@ -33,8 +33,10 @@ async def translate_text_route(request: TranslationRequest):
     try:
         from_language = await resolve_source_language(request.content, request.from_language)
 
-        # Use the Azure translation service
-        translated_text = await translate_text(request.content, from_language, request.to_language)
+        # Translate through the configured provider chain
+        translated_text = await translate_text(
+            request.content, from_language, request.to_language, request.glossary
+        )
 
         return TranslationResponse(
             translated_text=translated_text,
@@ -66,7 +68,9 @@ async def translate_batch_route(request: BatchTranslationRequest):
 
     try:
         from_language = await resolve_source_language(request.texts[0], request.from_language)
-        translations = await translate_batch(request.texts, from_language, request.to_language)
+        translations = await translate_batch(
+            request.texts, from_language, request.to_language, request.glossary
+        )
 
         return BatchTranslationResponse(
             translations=translations,
