@@ -12,6 +12,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   client in `clients/python` still supports 3.10.
 
 ### Security
+- **Feedback limits per key** (#140): each API key may store `FEEDBACK_PER_KEY_PER_DAY`
+  feedback records per UTC day (default 200; `429` with `Retry-After` beyond that), and the
+  same rating of the same translation sent again on the same day is ignored
+  (`{"status": "duplicate"}`). One key can no longer fill the shared store or flood the
+  evaluation set. Records sent with a key carry a `submitter` label, a keyed one-way hash
+  made only for feedback, so junk can be filtered out later.
 - `filelock` upgraded to 4.2.4 (GHSA-2g95-wg33-c5x2, GHSA-567q-5qvw-pf92,
   GHSA-9vhv-jxww-xfm5, GHSA-crv4-6mhj-j5jh, GHSA-jqc4-5cvw-7w85, GHSA-v4x8-3wr5-3wq8).
 
