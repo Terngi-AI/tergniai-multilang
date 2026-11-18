@@ -1,7 +1,7 @@
 [project]
 name = "terngi-ai"
 version = "1.1.0"
-description = "Open-source translation and conversational AI API for 96 languages, including local languages most software leaves out"
+description = "Open-source translation and conversational AI API for 109 languages, including local languages most software leaves out"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
