@@ -17,6 +17,12 @@ def _language_name(code: str) -> str:
     return config.SUPPORTED_LANGUAGES.get(code, code)
 
 
+def _untranslated(original: str, result: str) -> bool:
+    """True when a real sentence came back word for word (names and numbers alone may)"""
+    letters = sum(ch.isalpha() for ch in original)
+    return letters >= 20 and " " in original.strip() and result.strip() == original.strip()
+
+
 def _non_empty(text: str) -> str:
     text = normalize_text(text).strip()
     if not text:
@@ -112,14 +118,26 @@ async def translate_batch(
     )
 
     def parse(text: str) -> List[str]:
-        translations = llm.parse_json_object(text).get("translations")
+        try:
+            translations = llm.parse_json_object(text).get("translations")
+        except ValueError:
+            # Without strict JSON mode a model sometimes replies with just the translation.
+            # For a single text that is unambiguous, so accept it rather than failing.
+            if len(texts) != 1 or '"translations"' in text:
+                raise
+            translations = [_non_empty(text)]
         if (
             not isinstance(translations, list)
             or len(translations) != len(texts)
             or not all(isinstance(t, str) for t in translations)
         ):
             raise ValueError("translations missing or wrong length")
-        return [normalize_text(translation).strip() for translation in translations]
+        results = [normalize_text(translation).strip() for translation in translations]
+        # A long text handed back unchanged was not translated: let the next model try
+        for original, result in zip(texts, results, strict=True):
+            if _untranslated(original, result):
+                raise ValueError("returned the text untranslated")
+        return results
 
     return await llm.complete(
         [provider],
@@ -131,6 +149,8 @@ async def translate_batch(
         # Strict JSON mode can reject long single-text outputs on some providers.
         json_mode=len(texts) > 1,
         temperature=0.2,
+        # Translation needs no long reasoning; it also stops long texts coming back empty
+        reasoning_effort="low",
     )
 
 
