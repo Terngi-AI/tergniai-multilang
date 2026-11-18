@@ -244,3 +244,27 @@ def test_detected_codes_are_normalised(client, chain, monkeypatch, detected, exp
 
     assert body["language"] == expected
     assert body["is_supported"] is True
+
+
+SOUTH_ASIAN = ["sd", "ks", "or", "as", "mai", "bho", "gom", "doi", "mni", "sa", "brx", "sat", "dv"]
+
+
+def test_languages_of_india_pakistan_and_the_maldives_are_listed(client):
+    languages = client.get("/v1/languages").json()["languages"]
+    assert len(languages) == 109
+    for code in SOUTH_ASIAN + ["hi", "ur", "pa", "bn", "ta", "te", "ps", "ne", "si"]:
+        assert code in languages, code
+    assert languages["sd"] == "Sindhi" and languages["dv"] == "Dhivehi"
+
+
+@respx.mock
+@pytest.mark.parametrize("code", SOUTH_ASIAN)
+def test_new_south_asian_languages_are_translated_by_azure(client, chain, code):
+    azure = respx.post(TRANSLATE_URL).mock(
+        return_value=httpx.Response(200, json=[{"translations": [{"text": "ok", "to": code}]}])
+    )
+
+    response = translate(client, content="Welcome", tgt=code)
+
+    assert response.status_code == 200
+    assert azure.calls.last.request.url.params["to"] == code
