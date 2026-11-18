@@ -75,6 +75,29 @@ anywhere can improve it together.
 - Liveness (`/health`) and readiness (`/health/ready`) probes
 - Docker image with a health check, running as a non-root user
 
+## Open source and Terngi Kasa
+
+Terngi AI is free and MIT licensed, and it stays that way:
+
+- The translation and conversation API, including glossaries, API keys and per-key usage limits
+- Support for Azure, Groq and any OpenAI-compatible provider
+- Self-hosted MORENA setup and docs
+- All 96 languages
+
+**[Terngi Kasa](https://terngiai.com/developers)** is our hosted, paid service built on Terngi
+AI, for teams that would rather not run it themselves (usage-based and Enterprise plans):
+
+- Managed hosting with uptime guarantees: no servers or provider keys to run
+- Higher rate limits and priority queues on our hosted API
+- A usage dashboard, teams and organisation management
+- Managed glossaries and terminology, reviewed by fluent speakers before publishing
+- Improved models for local languages, tuned and evaluated on real-world use
+- A data processing agreement and regional hosting (fintech and government plans)
+- Support and SLAs
+
+[Talk to us](https://terngiai.com/contact) about Terngi Kasa. Improvements to the open-source
+core are released here for everyone.
+
 ## Quick start
 
 ### Prerequisites
