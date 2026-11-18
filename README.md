@@ -82,7 +82,7 @@ Terngi AI is free and MIT licensed, and it stays that way:
 - The translation and conversation API, including glossaries, API keys and per-key usage limits
 - Support for Azure, Groq and any OpenAI-compatible provider
 - Self-hosted MORENA setup and docs
-- All 96 languages
+- All 109 languages
 
 **[Terngi Kasa](https://terngiai.com/developers)** is our hosted, paid service built on Terngi
 AI, for teams that would rather not run it themselves (usage-based and Enterprise plans):
