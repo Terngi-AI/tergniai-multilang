@@ -75,6 +75,8 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           CORS_ORIGINS: ${{ vars.CORS_ORIGINS }}
           API_KEYS: ${{ secrets.API_KEYS }}
+          # Required: the service refuses to start without it (it keys conversation owners)
+          HASH_SECRET: ${{ secrets.HASH_SECRET }}
           RATE_LIMIT_PER_MINUTE: ${{ vars.RATE_LIMIT_PER_MINUTE || '60' }}
         run: |
           echo "Pulling image: $IMAGE_URI"
@@ -89,6 +91,7 @@ jobs:
             -e GROQ_API_KEY \
             -e CORS_ORIGINS \
             -e API_KEYS \
+            -e HASH_SECRET \
             -e RATE_LIMIT_PER_MINUTE \
             "$IMAGE_URI"
 
