@@ -10,6 +10,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Kashmiri, Odia, Assamese, Maithili, Bhojpuri, Konkani, Dogri, Manipuri, Sanskrit, Bodo,
   Santali and Dhivehi. Terngi AI now supports 109 languages, including all 22 official
   languages of India.
+- **Optional PII masking** (#142): with `PII_MASKING=true`, e-mail addresses, URLs, phone
+  numbers and long ID numbers are replaced with placeholders (`[[P1]]`, `[[P2]]`…) before
+  text reaches a translation, detection or `/v1/converse` chat provider, and restored in the
+  reply. A provider that drops a placeholder counts as failed and the next one is tried.
+  Off by default. See "If your deployment handles sensitive data" in `docs/DATA.md`.
+- **`FEEDBACK_RETENTION_DAYS`** (#141): feedback records older than this are deleted the next
+  time a record is stored and are never exported. Default 0 (no time limit).
+
+### Security
+- **Feedback is redacted before it is stored** (#141): e-mail addresses, URLs, phone numbers
+  and long ID numbers in `source_text`, `translated_text` and `correction` become `[EMAIL]`,
+  `[URL]`, `[PHONE]` and `[ID]`, so raw personal data never reaches the JSONL file or Redis.
+  The patterns moved to `services/pii.py`, shared with `scripts/redact_pii.py`. Records
+  stored before this change are not rewritten; run `scripts/redact_pii.py` over existing
+  feedback if you need them cleaned.
 
 ## [1.1.0] - 2026-11-17
 

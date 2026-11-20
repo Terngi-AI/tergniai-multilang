@@ -23,7 +23,9 @@ async def submit_feedback(request: FeedbackRequest, http_request: Request):
     Rate a translation or chat reply
 
     Feedback is only stored when `consent` is true. Records are append-only and never
-    contain API keys. They may be published as part of the open evaluation set.
+    contain API keys. E-mail addresses, URLs, phone numbers and long ID numbers in the texts
+    are replaced with `[EMAIL]`, `[URL]`, `[PHONE]` and `[ID]` before storage. Records may be
+    published as part of the open evaluation set.
 
     Each API key may store `FEEDBACK_PER_KEY_PER_DAY` records per UTC day (`429` with
     `Retry-After` beyond that). Sending the same rating of the same translation again on the
@@ -52,6 +54,8 @@ async def submit_feedback(request: FeedbackRequest, http_request: Request):
     }
     if request.correction:
         record["correction"] = request.correction
+    # Redact before the duplicate check too, so the fingerprint never sees raw personal data
+    record = feedback.redact_record(record)
 
     caller = rate_limit_id(http_request)
     admission = await feedback.admit(caller, record)

@@ -58,6 +58,7 @@ What each provider receives, and its current retention and training terms:
 | WhatsApp memory | `HMAC-SHA256(HASH_SECRET, phone number)` → preferred language + last 20 messages | in-process memory, or your Redis | `WHATSAPP_MEMORY_TTL_SECONDS` (default 30 days), at most 10,000 users |
 | WhatsApp deduplication | message IDs marked "seen" | in-process memory, or your Redis | 24 h (guards against Meta retrying a webhook) |
 | Rate-limit counters | API-key fingerprint or IP → request counts | in-process memory, or your Redis | one-minute windows |
+| Feedback (opt-in, `consent: true` only) | source text, translation, optional correction, languages, rating, provider; a keyed one-way `submitter` label for keyed callers. E-mails, URLs, phone numbers and long ID numbers are replaced with `[EMAIL]`, `[URL]`, `[PHONE]` and `[ID]` **before storage** (#141) | `FEEDBACK_FILE` (JSONL), or your Redis | `FEEDBACK_RETENTION_DAYS` (default 0 = no time limit), at most `FEEDBACK_MAX_RECORDS` (10,000) records |
 
 - Without `REDIS_URL`, everything is per process and volatile: it is lost on restart and
   not shared between replicas.
@@ -80,7 +81,18 @@ Health, government and education deployments often need more than the defaults:
 3. **Minimize what this API keeps:** `CACHE_TTL_SECONDS=0` if the quota saving isn't
    worth a copy of every text; a shorter `CONVERSATION_TTL_SECONDS`; and stateless
    `/v1/translate` instead of `/v1/chat` when you don't need memory.
-4. **Tell your users where their text goes.** The table above is the starting point for
+4. **Mask personal data before it leaves your server:** `PII_MASKING=true` (#142) replaces
+   e-mail addresses, URLs, phone numbers and long ID numbers with placeholders (`[[P1]]`,
+   `[[P2]]`…) before text is sent to a translation, detection or `/v1/converse` chat
+   provider, and puts the real values back in the reply. A translation that comes back
+   without one of its placeholders is treated as a failed provider and the next one is
+   tried (counted in `terngi_pii_placeholders_lost_total`). It does **not** yet cover the
+   `/v1/chat` agent, whose tools may need the real values. The patterns are deliberately
+   simple (the same as `scripts/redact_pii.py`): names, addresses and free-form details are
+   not detected, so masking reduces exposure but does not anonymise the text.
+5. **Set a feedback retention period:** `FEEDBACK_RETENTION_DAYS` (for example 365) deletes
+   older feedback records the next time one is stored, and the export script skips them.
+6. **Tell your users where their text goes.** The table above is the starting point for
    your own record of processing and for contracts with the providers.
 
 ## Keeping this page current

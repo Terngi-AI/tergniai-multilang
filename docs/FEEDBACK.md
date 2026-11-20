@@ -29,7 +29,14 @@ that its text will appear in the evaluation set.
 
 ## Storage
 
-Feedback is append-only. Records are never updated or deleted by the API.
+Feedback is append-only: the API never edits a record, and deletes one only when it is older
+than `FEEDBACK_RETENTION_DAYS` (see below).
+
+**Personal data is redacted before storage** (#141). E-mail addresses, URLs, phone numbers and
+long ID numbers in `source_text`, `translated_text` and `correction` are replaced with
+`[EMAIL]`, `[URL]`, `[PHONE]` and `[ID]`, using the same patterns as
+`scripts/redact_pii.py` (`services/pii.py`). Names and other free-form details are not
+detected, so still review exports before publishing them.
 
 - With `REDIS_URL` set, records are appended to the Redis list
   `<REDIS_PREFIX>feedback` and are shared by every replica. **Use Redis in production**:
@@ -42,6 +49,10 @@ Feedback is append-only. Records are never updated or deleted by the API.
 are dropped when the list reaches the cap. With a JSONL file, new records are refused with
 `507` until the operator rotates or removes the file. `0` disables the cap, which is not
 recommended for a public deployment.
+
+`FEEDBACK_RETENTION_DAYS` (default `0`, no time limit) deletes records older than that many
+days the next time a record is stored, and `scripts/export_feedback.py` skips them. A year
+(`365`) is a reasonable starting point if you have no other policy.
 
 The endpoint is under `/v1`, so it uses the same API-key authentication and per-client rate
 limit as the other API routes.
