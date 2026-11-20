@@ -268,3 +268,124 @@ def test_new_south_asian_languages_are_translated_by_azure(client, chain, code):
 
     assert response.status_code == 200
     assert azure.calls.last.request.url.params["to"] == code
+
+
+@respx.mock
+def test_single_translation_in_plain_text_is_accepted(client, chain, monkeypatch):
+    # Without strict JSON mode a model may reply with just the translation
+    monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", [])
+    respx.post(CHAT_URL).mock(return_value=chat_reply("Bonjour, comment allez-vous ?"))
+
+    response = translate(client, content="Hello, how are you?", tgt="fr")
+
+    assert response.status_code == 200
+    assert response.json()["translated_text"] == "Bonjour, comment allez-vous ?"
+
+
+@respx.mock
+def test_batch_still_requires_json(client, chain, monkeypatch):
+    monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", [])
+    respx.post(CHAT_URL).mock(return_value=chat_reply("Bonjour\nMerci"))
+
+    response = client.post(
+        "/v1/translate/batch",
+        json={"texts": ["Hello", "Thank you"], "from_language": "en", "to_language": "fr"},
+    )
+
+    assert response.status_code == 502
+
+
+@respx.mock
+def test_untranslated_output_falls_back_to_the_next_model(client, chain, monkeypatch):
+    monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", [])
+    provider = config.LLM_PROVIDERS["groq"]
+    monkeypatch.setitem(
+        config.LLM_PROVIDERS,
+        "groq",
+        config.LLMProvider(
+            name=provider.name,
+            kind=provider.kind,
+            base_url=provider.base_url,
+            api_keys=provider.api_keys,
+            models=("model-a", "model-b"),
+        ),
+    )
+    english = "Stone Town has wonderful street food every evening."
+    route = respx.post(CHAT_URL).mock(
+        side_effect=[
+            chat_reply({"translations": [english]}),
+            chat_reply(
+                {"translations": ["Stone Town a une excellente cuisine de rue chaque soir."]}
+            ),
+        ]
+    )
+
+    response = translate(client, content=english, tgt="fr")
+
+    assert response.json()["translated_text"].startswith("Stone Town a une")
+    assert route.call_count == 2
+    assert json.loads(route.calls[1].request.content)["model"] == "model-b"
+
+
+@respx.mock
+def test_names_may_come_back_unchanged(client, chain, monkeypatch):
+    monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", [])
+    respx.post(CHAT_URL).mock(return_value=chat_reply({"translations": ["Stone Town"]}))
+
+    assert (
+        translate(client, content="Stone Town", tgt="fr").json()["translated_text"] == "Stone Town"
+    )
+
+
+@respx.mock
+def test_json_with_raw_line_breaks_is_unwrapped(client, chain, monkeypatch):
+    monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", [])
+    # Models often put real line breaks inside JSON strings
+    raw = '{\n  "translations": [\n    "**Jour 1**\n- Matin : Stone Town"\n  ]\n}'
+    respx.post(CHAT_URL).mock(return_value=chat_reply(raw))
+
+    result = translate(client, content="**Day 1**\n- Morning: Stone Town", tgt="fr").json()
+
+    assert result["translated_text"] == "**Jour 1**\n- Matin : Stone Town"
+
+
+@respx.mock
+def test_broken_json_wrapper_is_never_shown_as_the_translation(client, chain, monkeypatch):
+    monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", [])
+    respx.post(CHAT_URL).mock(return_value=chat_reply('{"translations": ["Bonjour"'))
+
+    response = translate(client, content="Hello there, my friend", tgt="fr")
+
+    assert response.status_code == 502
+
+
+@respx.mock
+def test_translations_ask_reasoning_models_for_low_effort(client, chain, monkeypatch):
+    monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", [])
+    provider = config.LLM_PROVIDERS["groq"]
+    monkeypatch.setitem(
+        config.LLM_PROVIDERS,
+        "groq",
+        config.LLMProvider(
+            name=provider.name,
+            kind=provider.kind,
+            base_url=provider.base_url,
+            api_keys=provider.api_keys,
+            models=("openai/gpt-oss-120b",),
+        ),
+    )
+    route = respx.post(CHAT_URL).mock(return_value=chat_reply({"translations": ["Bonjour"]}))
+
+    translate(client, content="Hello", tgt="fr")
+
+    assert json.loads(route.calls.last.request.content)["reasoning_effort"] == "low"
+
+
+@respx.mock
+def test_other_models_get_no_reasoning_field(client, chain, monkeypatch):
+    monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", [])
+    route = respx.post(CHAT_URL).mock(return_value=chat_reply({"translations": ["Bonjour"]}))
+
+    translate(client, content="Hello", tgt="fr")
+
+    assert "reasoning_effort" not in json.loads(route.calls.last.request.content)
