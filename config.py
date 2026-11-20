@@ -354,6 +354,13 @@ FEEDBACK_MAX_RECORDS = int(os.getenv("FEEDBACK_MAX_RECORDS", "10000"))
 # Feedback records one caller (API key, or IP without API keys) may store per UTC day, so one
 # caller can't fill the store or flood the evaluation set (#140). 0 disables the limit.
 FEEDBACK_PER_KEY_PER_DAY = int(os.getenv("FEEDBACK_PER_KEY_PER_DAY", "200"))
+# Feedback records older than this many days are deleted (#141). 0 keeps them until
+# FEEDBACK_MAX_RECORDS pushes them out.
+FEEDBACK_RETENTION_DAYS = int(os.getenv("FEEDBACK_RETENTION_DAYS", "0"))
+
+# Replace e-mails, phone numbers, URLs and long ID numbers with placeholders before text is
+# sent to a translation or chat provider, and restore them in the reply (#142). Off by default.
+PII_MASKING = os.getenv("PII_MASKING", "false").strip().lower() == "true"
 
 # Client authentication: comma-separated keys accepted in the X-API-Key header.
 # Leave empty to disable authentication (e.g. for local development).

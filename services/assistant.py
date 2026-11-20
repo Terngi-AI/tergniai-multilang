@@ -7,9 +7,16 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import config
 from services import glossary as glossary_service
-from services import llm
+from services import llm, pii
 from services.glossary import Glossary
 from services.text import normalize_text
+
+PLACEHOLDER_INSTRUCTION = (
+    "Tokens such as [[P1]] stand for personal details that were hidden for privacy. "
+    "Copy them exactly, unchanged and untranslated, wherever the text needs them."
+)
+# Joins chat turns for masking; a NUL never matches a personal-data pattern
+_TURN_SEPARATOR = "\n\x00\n"
 
 
 def _language_name(code: str) -> str:
@@ -41,25 +48,36 @@ async def get_response(content: str, memory_context: Optional[List[Dict[str, Any
     Returns:
         Reply in English
     """
-    content = normalize_text(content)
-    messages: List[Dict[str, str]] = [{"role": "system", "content": config.SYSTEM_PROMPT}]
+    turns: List[Dict[str, str]] = []
 
     # Add memory context if provided (only user/assistant turns are allowed)
     if memory_context:
         for message in memory_context:
             if message.get("role") in ("user", "assistant") and "content" in message:
-                messages.append(
-                    {
-                        "role": message["role"],
-                        "content": normalize_text(message["content"]),
-                    }
+                turns.append(
+                    {"role": message["role"], "content": normalize_text(message["content"])}
                 )
+    turns.append({"role": "user", "content": normalize_text(content)})
 
-    messages.append({"role": "user", "content": content})
+    system = config.SYSTEM_PROMPT
+    replacements: Dict[str, str] = {}
+    if config.PII_MASKING:
+        # One placeholder map for the whole history, so a number mentioned twice is the same
+        # placeholder each time. A reply needn't repeat every value, so none is required back.
+        joined, replacements = pii.mask(_TURN_SEPARATOR.join(turn["content"] for turn in turns))
+        for turn, masked in zip(turns, joined.split(_TURN_SEPARATOR), strict=True):
+            turn["content"] = masked
+        if replacements:
+            system += f"\n\n{PLACEHOLDER_INSTRUCTION}"
 
-    return await llm.complete(
-        config.CHAT_PROVIDERS, messages, parse=_non_empty, temperature=0.7, max_tokens=1024
+    reply = await llm.complete(
+        config.CHAT_PROVIDERS,
+        [{"role": "system", "content": system}, *turns],
+        parse=_non_empty,
+        temperature=0.7,
+        max_tokens=1024,
     )
+    return pii.unmask(reply, replacements)
 
 
 async def translate_batch(
@@ -91,7 +109,7 @@ async def translate_batch(
     if config.LLM_PROVIDERS[provider].kind == "morena":
         instruction = (
             f"Translate the following text from {source} to {target}. "
-            "Reply with only the translation. Keep placeholder tokens unchanged."
+            "Reply with only the translation. Keep placeholder tokens such as [[P1]] unchanged."
         )
         translated: List[str] = []
         for text in texts:
@@ -116,6 +134,8 @@ async def translate_batch(
         "translated string per input, in the same order."
         f"{terms}"
     )
+    if any("[[P" in text for text in texts):
+        system += f" {PLACEHOLDER_INSTRUCTION}"
 
     def parse(text: str) -> List[str]:
         try:

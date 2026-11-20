@@ -3,6 +3,9 @@ Translation and language detection over an ordered chain of providers, with cach
 
 Providers come from TRANSLATION_PROVIDERS / DETECTION_PROVIDERS: "azure" or any LLM
 provider name. Unconfigured providers are skipped; if one fails the next is tried.
+
+With PII_MASKING, personal data is replaced with placeholders before any provider sees the
+text and restored in the result; a provider that drops a placeholder counts as failed (#142).
 """
 
 import hashlib
@@ -14,7 +17,7 @@ from fastapi import HTTPException
 
 import config
 import metrics
-from services import assistant, azure_translator, deadline, llm
+from services import assistant, azure_translator, deadline, llm, pii
 from services.glossary import Glossary, cache_signature, entries_for
 from services.store import StoreError, make_store
 from services.text import normalize_text
@@ -114,6 +117,37 @@ async def _run_chain(
     raise last_error
 
 
+def _masked(
+    call: Callable[[List[str]], Awaitable[List[str]]], texts: List[str]
+) -> Callable[[], Awaitable[List[str]]]:
+    """
+    Wrap a provider call so it only sees masked texts, and restore its results
+
+    A result missing one of its placeholders can't be restored faithfully, so the provider
+    is treated as failed (502) and the chain moves on to the next one.
+    """
+    masked = [pii.mask(text) for text in texts]
+
+    async def run() -> List[str]:
+        results = await call([text for text, _ in masked])
+        restored: List[str] = []
+        for result, (_, replacements) in zip(results, masked, strict=True):
+            if pii.missing(result, replacements):
+                metrics.PII_PLACEHOLDERS_LOST.inc()
+                raise HTTPException(status_code=502, detail="Provider dropped masked values")
+            restored.append(pii.unmask(result, replacements))
+        return restored
+
+    return run
+
+
+def _unmasked(
+    call: Callable[[List[str]], Awaitable[List[str]]], texts: List[str]
+) -> Callable[[], Awaitable[List[str]]]:
+    """The provider call as-is (PII_MASKING off)"""
+    return lambda: call(texts)
+
+
 async def translate_text(
     content: str,
     from_language: str,
@@ -170,12 +204,20 @@ async def translate_batch(
 
     if missing:
         pending = [texts[i] for i in missing]
+
+        def azure_call(items: List[str]) -> Awaitable[List[str]]:
+            return azure_translator.translate_batch(items, from_language, to_language, glossary)
+
+        def llm_call(name: str) -> Callable[[List[str]], Awaitable[List[str]]]:
+            return lambda items: assistant.translate_batch(
+                items, from_language, to_language, name, glossary
+            )
+
+        wrap = _masked if config.PII_MASKING else _unmasked
         translated = await _run_chain(
             config.TRANSLATION_PROVIDERS,
-            lambda: azure_translator.translate_batch(pending, from_language, to_language, glossary),
-            lambda name: assistant.translate_batch(
-                pending, from_language, to_language, name, glossary
-            ),
+            wrap(azure_call, pending),
+            lambda name: wrap(llm_call(name), pending)(),
             languages=(from_language, to_language),
         )
         for i, text in zip(missing, translated, strict=True):
@@ -222,6 +264,9 @@ async def detect_language(content: str) -> Tuple[str, float]:
         Tuple of (language code, confidence score between 0 and 1)
     """
     content = normalize_text(content)
+    if config.PII_MASKING:
+        # Placeholders don't change the language, and nothing needs restoring
+        content, _ = pii.mask(content)
     language, score = await _run_chain(
         config.DETECTION_PROVIDERS,
         lambda: azure_translator.detect_language(content),
