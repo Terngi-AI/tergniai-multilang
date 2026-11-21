@@ -16,8 +16,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import HTTPException
 
 import config
-import metrics
-from services import deadline, llm, moderation, translator
+from services import assistant, deadline, llm, moderation, translator
 from services.languages import resolve_source_language
 from services.text import normalize_text
 
@@ -205,6 +204,7 @@ def _system_prompt(reply_language: str) -> str:
         "to say something), `detect_language` if unsure of a language, and `get_current_time` "
         "for dates and times. Never invent tool results and don't mention tools to the user.\n\n"
         f"{reply_rule}"
+        f"{assistant.canary_instruction()}"
     )
 
 
@@ -280,32 +280,25 @@ async def run_agent(
     source = await resolve_source_language(message, language)
     reply = reply_language or source
 
-    # Optional prompt-guard moderation (issue #38). Classify the user's own message
-    # before it reaches the chat model; a flagged message gets a polite refusal in the
-    # user's language, without calling the model.
-    if moderation.enabled():
-        try:
-            injected = await moderation.classify(message)
-        except moderation.ModerationError:
-            if moderation.fail_closed():
-                raise HTTPException(
-                    status_code=503, detail="Moderation service unavailable"
-                ) from None
-            injected = False
-        if injected:
-            metrics.MODERATION_FLAGGED.labels("user_message").inc()
-            logger.info("Moderation flagged a user message (text not logged)")
-            return {
-                "answer": await moderation.refusal(reply),
-                "language": source,
-                "reply_language": reply,
-                "steps": [],
-            }
-
-    # Give the model the original message plus an English rendering of it
-    user_content = message
+    # The model gets the original message plus an English rendering of it
+    english = message
     if source != "en":
         english = await translator.translate_text(message, source, "en")
+
+    # Optional prompt-guard moderation (#38). Both the original and its English rendering
+    # are classified before either reaches the chat model: Prompt Guard is weaker on many
+    # local languages, and the English text is what the model reads most clearly (#168).
+    # A flagged message gets a polite refusal in the user's language.
+    if await moderation.screen([("user_message", message), ("translation", english)]):
+        return {
+            "answer": await moderation.refusal(reply),
+            "language": source,
+            "reply_language": reply,
+            "steps": [],
+        }
+
+    user_content = message
+    if source != "en":
         user_content = (
             f"[Message in {config.SUPPORTED_LANGUAGES[source]}]\n{message}\n\n"
             f"[English translation]\n{english}"
@@ -383,20 +376,9 @@ async def run_agent(
                 name in ("translate", "detect_language")
                 and isinstance(arguments, dict)
                 and isinstance(arguments.get("text"), str)
-                and arguments["text"] != message
-                and moderation.enabled()
+                and arguments["text"] not in (message, english)
             ):
-                try:
-                    tool_injected = await moderation.classify(arguments["text"])
-                except moderation.ModerationError:
-                    if moderation.fail_closed():
-                        raise HTTPException(
-                            status_code=503, detail="Moderation service unavailable"
-                        ) from None
-                    tool_injected = False
-                if tool_injected:
-                    metrics.MODERATION_FLAGGED.labels("tool_result").inc()
-                    logger.info("Moderation flagged a tool result (text not logged)")
+                if await moderation.screen([("tool_result", arguments["text"])]):
                     output = {
                         "error": "This content was blocked by moderation.",
                         "moderated": True,

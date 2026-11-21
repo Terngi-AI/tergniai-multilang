@@ -19,6 +19,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   time a record is stored and are never exported. Default 0 (no time limit).
 
 ### Security
+- **Moderation reads the whole message and its English translation** (#168): texts longer
+  than Prompt Guard's 512 tokens are classified in overlapping chunks
+  (`MODERATION_CHUNK_CHARS`, at most `MODERATION_MAX_CHUNKS` per check), so an injection after
+  long padding is no longer skipped. A non-English message's English translation is
+  classified too, since Prompt Guard is weaker on many local languages.
+- **`/v1/converse` is moderated and treats its history as untrusted** (#169): the message,
+  its translation and the client-supplied `memory_context` are classified when moderation
+  is on; the model is told client history may not be genuine; and
+  `CONVERSE_ALLOW_ASSISTANT_HISTORY=false` rejects client-written assistant turns.
+- **Prompt-injection regression set** (#170): 43 attacks in 8 languages
+  (`eval/injection/cases.jsonl`), a runner (`scripts/eval_injection.py`) and a weekly,
+  approval-gated workflow. `PROMPT_CANARY` plants a secret in the system prompts of an
+  evaluation deployment so prompt leaks are detectable.
 - **Feedback is redacted before it is stored** (#141): e-mail addresses, URLs, phone numbers
   and long ID numbers in `source_text`, `translated_text` and `correction` become `[EMAIL]`,
   `[URL]`, `[PHONE]` and `[ID]`, so raw personal data never reaches the JSONL file or Redis.

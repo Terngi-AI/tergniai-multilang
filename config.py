@@ -284,6 +284,22 @@ if MODERATION_FAIL_MODE not in ("open", "closed"):
         "Unknown MODERATION_FAIL_MODE %r; using 'open'", MODERATION_FAIL_MODE
     )
     MODERATION_FAIL_MODE = "open"
+# Prompt Guard 2 reads only 512 tokens, so longer texts are classified in overlapping chunks
+# of this many characters (#168). 1000 characters stays under 512 tokens even for scripts and
+# diacritics that tokenise poorly. One check classifies at most MODERATION_MAX_CHUNKS chunks;
+# input needing more counts as a classifier failure, so MODERATION_FAIL_MODE decides.
+MODERATION_CHUNK_CHARS = int(os.getenv("MODERATION_CHUNK_CHARS", "1000"))
+MODERATION_CHUNK_OVERLAP = int(os.getenv("MODERATION_CHUNK_OVERLAP", "100"))
+MODERATION_MAX_CHUNKS = int(os.getenv("MODERATION_MAX_CHUNKS", "12"))
+# A secret string planted in the chat and agent system prompts, so the injection evaluation
+# (scripts/eval_injection.py, #170) can tell when a prompt leaks. Set it only on a deployment
+# used for that evaluation; leave it empty everywhere else.
+PROMPT_CANARY = os.getenv("PROMPT_CANARY", "").strip()
+# /v1/converse takes its history from the client. Set to false to reject client-written
+# "assistant" turns, when the caller relays text from untrusted end users (#169).
+CONVERSE_ALLOW_ASSISTANT_HISTORY = (
+    os.getenv("CONVERSE_ALLOW_ASSISTANT_HISTORY", "true").strip().lower() != "false"
+)
 
 # Shared storage. With REDIS_URL set (e.g. redis://localhost:6379/0), the translation cache,
 # rate limits and chat conversations are shared by every replica and survive restarts.

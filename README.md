@@ -211,6 +211,11 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `PROMPT_GUARD_MODEL` | no | `meta-llama/llama-prompt-guard-2-86m` | Classifier model for chat/agent moderation; does not need to be listed in a provider's MODELS, and is never tried as a chat fallback |
 | `MODERATION_THRESHOLD` | no | `0.5` | Score at or above which the classifier's probability counts as an injection |
 | `MODERATION_FAIL_MODE` | no | `open` | What happens if the classifier is unreachable: `open` lets the request through, `closed` refuses with `503` |
+| `MODERATION_CHUNK_CHARS` | no | `1000` | Longer texts are classified in overlapping chunks of this many characters (Prompt Guard reads 512 tokens) |
+| `MODERATION_CHUNK_OVERLAP` | no | `100` | Characters shared by neighbouring chunks |
+| `MODERATION_MAX_CHUNKS` | no | `12` | Most chunks classified per check; input needing more counts as a classifier failure (`MODERATION_FAIL_MODE` decides) |
+| `CONVERSE_ALLOW_ASSISTANT_HISTORY` | no | `true` | `false` rejects client-written `assistant` turns in `/v1/converse` `memory_context` with `400` |
+| `PROMPT_CANARY` | no | *(empty)* | Only on a deployment used for the injection evaluation: a secret planted in the chat and agent system prompts so leaks are detectable |
 | `CORS_ORIGINS` | no | *(disabled)* | Comma-separated allowed origins |
 | `FORWARDED_ALLOW_IPS` | no | `127.0.0.1,::1` | Proxy IPs/CIDRs trusted to set `X-Forwarded-For` |
 | `LOG_LEVEL` | no | `INFO` | Python log level. Upstream error *bodies* are only logged at `DEBUG` (they can echo user text); `INFO` logs the status, error code and request ID |
@@ -225,13 +230,14 @@ each model is tried in order, and keys rotate between requests. A key that is re
 unusable output is skipped for that request. The app starts without keys; endpoints with
 no configured provider return `503`.
 
-**Moderation:** when `MODERATION_PROVIDERS` is set, user messages and agent tool results
-are classified before the chat model sees them. Groq answers the classifier with a
+**Moderation:** when `MODERATION_PROVIDERS` is set, user messages (and their English
+translation), agent tool results and `/v1/converse` history are classified before the chat
+model sees them. Groq answers the classifier with a
 probability score (near 1 = injection), compared against `MODERATION_THRESHOLD`;
 label-based answers ("INJECTION"/"MALICIOUS") from other deployments are matched as a
 fallback. The guard model does not need to be listed in the provider's MODELS and is
-never tried as a chat fallback: a guard verdict is not an answer. Note that Prompt Guard
-2 has a 512-token context, so only the beginning of very long messages is classified.
+never tried as a chat fallback: a guard verdict is not an answer. Prompt Guard 2 reads only
+512 tokens, so longer texts are classified in overlapping chunks (`MODERATION_CHUNK_CHARS`).
 
 JSON requests share one `REQUEST_DEADLINE_SECONDS` wall-clock budget and one
 `REQUEST_MAX_UPSTREAM_ATTEMPTS` cap across retries, provider fallbacks and agent steps.
