@@ -60,24 +60,34 @@ agent's translations.
 
 ## Moderation (optional)
 
-`POST /v1/chat`, `POST /v1/chat/stream` and `POST /v1/agent` can screen user messages with
-Meta's Llama Prompt Guard before they reach the chat model:
+`POST /v1/chat`, `POST /v1/chat/stream`, `POST /v1/agent` and `POST /v1/converse` can screen
+user messages with Meta's Llama Prompt Guard before they reach the chat model:
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `MODERATION_PROVIDERS` | empty (disabled) | LLM providers that serve Prompt Guard, e.g. `groq` |
 | `PROMPT_GUARD_MODEL` | `meta-llama/llama-prompt-guard-2-86m` | The classifier model served by those providers |
 | `MODERATION_FAIL_MODE` | `open` | Classifier unreachable: `open` lets the request through, `closed` refuses it with `503` |
+| `MODERATION_CHUNK_CHARS` | `1000` | Longer texts are split into overlapping chunks of this size, classified concurrently |
+| `MODERATION_MAX_CHUNKS` | `12` | Most chunks per check; more counts as a classifier failure, so `MODERATION_FAIL_MODE` decides |
 
 When moderation is enabled:
 
-- The user's own message is classified before any model call. A flagged message is answered
-  with a polite refusal translated into the user's language; the chat model is never called.
+- The user's own message **and its English translation** are classified before the chat
+  model is called (#168). Prompt Guard is weaker on many local languages, and the English
+  rendering is what the model reads most clearly, so either one being flagged is enough. A
+  flagged message is answered with a polite refusal translated into the user's language.
+- Prompt Guard 2 reads only 512 tokens, so texts longer than `MODERATION_CHUNK_CHARS` are
+  classified in overlapping chunks; an injection hidden after long padding is still seen.
+- In `/v1/converse`, the client-supplied `memory_context` is classified too (joined into one
+  text), and the model is told those turns may not be genuine (#169). Set
+  `CONVERSE_ALLOW_ASSISTANT_HISTORY=false` to reject client-written assistant turns when
+  your integration relays text from untrusted end users.
 - Tool calls that would echo user-supplied text into the context (`translate`,
   `detect_language`) are classified too, so an injection hidden in a tool argument never
   reaches the model; the tool result is replaced with a blocked notice.
 - Flagged events are logged without the message text and counted in
-  `terngi_moderation_flagged_total` (label `kind` = `user_message` or `tool_result`).
+  `terngi_moderation_flagged_total` (label `kind` = `user_message`, `translation`, `history` or `tool_result`).
 - When moderation is disabled there is no extra latency and no extra upstream call.
 
 Prompt Guard is a small classifier; it runs on the same providers as the chat model, so it

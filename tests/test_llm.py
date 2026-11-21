@@ -62,7 +62,9 @@ async def test_chat_builds_messages(providers):
     assert answer == "Hello!"
     messages = sent(route.calls.last)["messages"]
     assert [m["role"] for m in messages] == ["system", "user", "user"]
-    assert messages[0]["content"] == config.SYSTEM_PROMPT
+    assert messages[0]["content"].startswith(config.SYSTEM_PROMPT)
+    # Client-supplied history is flagged as possibly not genuine (#169)
+    assert assistant.CLIENT_HISTORY_NOTE in messages[0]["content"]
 
 
 @respx.mock

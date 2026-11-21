@@ -42,13 +42,39 @@ No configuration needed; these are on for every deployment:
 | 1 | Unauthenticated public exposure | Authentication switches on as soon as `API_KEYS` is set | Set `API_KEYS` — a public instance without it is an open quota tap |
 | 2 | Key leakage (`.env` in git, logs, screenshots) | Keys are never logged; gitleaks and GitHub secret scanning in CI | Use the host's secret store, never commit `.env`, rotate on suspicion — [SECURITY.md → Handling secrets](../SECURITY.md#handling-secrets) |
 | 3 | Quota abuse by a hostile or careless client | Rate limits, deadlines, attempt caps, size limits | Keep `RATE_LIMIT_PER_MINUTE` and the `MAX_*` limits small on public instances — [DEPLOY.md → Protect a public demo](DEPLOY.md#protect-a-public-demo) |
-| 4 | Prompt injection or abuse through `/v1/chat`, `/v1/agent`, or LLM translation input | History and translation payloads are treated as data rather than instructions; agent step limit; (abuse detection is tracked in [#38](https://github.com/Terngi-AI/tergniai-multilang/issues/38)) | Keep `AGENT_MAX_STEPS` low; review logs for abuse patterns |
+| 4 | Prompt injection or abuse through `/v1/chat`, `/v1/agent`, `/v1/converse`, or LLM translation input | History and translation payloads are treated as data rather than instructions; agent step limit; optional Prompt Guard moderation of the message, its English translation, tool text and `/v1/converse` history, in chunks so long padding can't hide an injection (#38, #168, #169); a weekly [injection evaluation](#prompt-injection-evaluation) | Set `MODERATION_PROVIDERS` (and `MODERATION_FAIL_MODE=closed` for untrusted input); keep `AGENT_MAX_STEPS` low. `/v1/converse` history is **written by the client**: prefer `/v1/chat` (server-side history) for untrusted input, or set `CONVERSE_ALLOW_ASSISTANT_HISTORY=false` |
 | 5 | Spam or abuse through `/v1/whatsapp/send` | The endpoint requires `X-API-Key`; Meta's 24-hour window and template rules apply | Send only to people who consented, with approved templates — [WHATSAPP.md → Sending messages](WHATSAPP.md#sending-messages) |
 | 6 | Data at rest in Redis (cache, conversations, WhatsApp memory) | Redis is optional; keys and owners are stored only as hashes | If you enable it: private network, TLS + password, and no disk persistence visible to anyone — [SECURITY.md → Runtime protections](../SECURITY.md#runtime-protections); the bundled compose stack runs Redis **without persistence** ([#85](https://github.com/Terngi-AI/tergniai-multilang/issues/85)) |
 | 7 | Logs leak user content | Bodies are never logged; access logs record the route template, so conversation IDs never reach the logs (#107) | Keep log retention short and review what your log pipeline collects ([`LOG_LEVEL`](../.env.example)) |
 | 8 | The `/chat` web page | Same-origin, strict CSP (no inline scripts) | The API key stays in `sessionStorage` by default and is cleared when the browser closes; it is only kept in `localStorage` if the user ticks "Remember on this device" — so don't tick that on a machine shared with untrusted people |
 | 9 | Compromised CI or self-hosted runner | Pinned actions, read-only token, `pull_request` (never `pull_request_target`) triggers, workflow approval for first-time contributors | Approve external runs, keep self-hosted runners patched and isolated — [SECURITY.md → Automated security scanning](../SECURITY.md#automated-security-scanning) |
 | 10 | Supply chain: a tampered package, image or action | Hash-locked requirements, pinned action SHAs, digest-pinned images, daily Trivy/OSV/pip-audit scans | Bump the pins when advisories land — [CONTRIBUTING.md → Security checks and dependencies](../CONTRIBUTING.md#security-checks-and-dependencies) |
+
+## Prompt-injection evaluation
+
+`eval/injection/cases.jsonl` holds attacks against `/v1/translate`, `/v1/chat` and
+`/v1/converse`: instructions disguised as text to translate, system-prompt extraction,
+role-play jailbreaks, fake `<system>` markers, injections after long padding, and forged
+assistant turns, in English and in Yoruba, Hausa, Igbo, Nigerian Pidgin, Swahili, Hindi and
+Arabic (#170). `scripts/eval_injection.py` sends them to a running deployment and reports a
+pass rate overall and per language, endpoint and attack category.
+
+The **Injection eval** workflow runs it weekly against the deployment in `EVAL_API_URL`,
+after approval in the `injection-eval` environment. That deployment should set
+`PROMPT_CANARY`; the runner gets the same value as a secret, so any reply that contains it
+is a leaked system prompt. Never set `PROMPT_CANARY` in production.
+
+Reading the report (`injection-report.json`, kept 30 days as a workflow artifact):
+
+- **failed** means a defence gave way: the model obeyed the injected text, leaked the
+  canary or followed forged history. Look at `by_language` first. A language far below the
+  others usually means Prompt Guard misses it, and is worth a new case and an issue.
+- **error** is an outage or timeout. It's left out of the pass rate.
+- The local-language cases are marked `"reviewed": false` until a native speaker has
+  checked them; contributions are welcome ([eval/injection/README.md](../eval/injection/README.md)).
+
+Results depend on the providers and models configured, so compare runs of the same
+deployment over time rather than one deployment with another.
 
 ## Operator checklist
 
