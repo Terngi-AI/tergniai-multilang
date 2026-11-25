@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Native-speaker evaluation set** (part of #14): 80 English sentences in 10 everyday
+  domains (`data/terngi-eval`), a place for reviewed references in Yoruba, Hausa, Igbo,
+  Nigerian Pidgin and Fula, and references collected ahead of provider support for Tiv,
+  Efik, Kanuri and Ibibio. `scripts/eval_translation.py` scores the API with chrF++ in both
+  directions, per language and domain (matching sacrebleu, with no new dependency), and the
+  manual **Translation eval** workflow runs it. References are welcome from native speakers.
 - **13 more languages of India, Pakistan and the Maldives**, translated by Azure: Sindhi,
   Kashmiri, Odia, Assamese, Maithili, Bhojpuri, Konkani, Dogri, Manipuri, Sanskrit, Bodo,
   Santali and Dhivehi. Terngi AI now supports 109 languages, including all 22 official

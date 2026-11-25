@@ -12,6 +12,11 @@ Evaluation and training data lives here. The rules:
 4. **Licences are recorded per dataset.** If a licence does not allow redistribution,
    commit a pointer (URL + access instructions) instead of the data.
 
+Datasets in this folder:
+
+- [`terngi-eval/`](terngi-eval/README.md): the native-speaker evaluation set (#14). Native
+  speakers, your references are very welcome.
+
 Suggested layout:
 
 ```
