@@ -241,6 +241,7 @@ async def _call(
     max_tokens: Optional[int],
     tools: Optional[List[Dict[str, Any]]] = None,
     on_token: Optional[OnToken] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> Message:
     """Send one request to one provider/model/key and return the assistant message"""
     headers = {"Authorization": f"Bearer {key}"} if key else {}
@@ -269,6 +270,10 @@ async def _call(
     body = {"model": model, "messages": messages, "temperature": temperature}
     if max_tokens:
         body["max_tokens"] = max_tokens
+    # Reasoning models (gpt-oss) spend output tokens thinking before they answer; on long
+    # texts that can use up the budget and leave an empty reply. Only they take this field.
+    if reasoning_effort and "gpt-oss" in model.lower():
+        body["reasoning_effort"] = reasoning_effort
     if json_mode:
         body["response_format"] = {"type": "json_object"}
     if tools:
@@ -304,6 +309,7 @@ async def complete(
     json_mode: bool = False,
     temperature: float = 0.7,
     max_tokens: Optional[int] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> T:
     """
     Generate a completion, trying providers, models and keys until one succeeds
@@ -315,6 +321,7 @@ async def complete(
         json_mode: Ask OpenAI-compatible providers for a JSON object
         temperature: Sampling temperature
         max_tokens: Optional output limit
+        reasoning_effort: "low", "medium" or "high" for reasoning models (gpt-oss)
 
     Returns:
         The parsed result from the first provider that succeeds
@@ -326,6 +333,7 @@ async def complete(
         json_mode=json_mode,
         temperature=temperature,
         max_tokens=max_tokens,
+        reasoning_effort=reasoning_effort,
     )
 
 
@@ -340,6 +348,7 @@ async def complete_message(
     max_tokens: Optional[int] = None,
     on_token: Optional[OnToken] = None,
     model: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> T:
     """
     Like `complete`, but `parse` receives the whole assistant message (including any
@@ -425,6 +434,7 @@ async def complete_message(
                                 max_tokens,
                                 tools,
                                 forward if on_token is not None else None,
+                                reasoning_effort,
                             )
                     except (_KeyFailed, _ModelFailed) as e:
                         if emitted:
@@ -486,7 +496,8 @@ def parse_json_object(text: str) -> Dict[str, Any]:
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end < start:
         raise ValueError("no JSON object in output")
-    data = json.loads(text[start : end + 1])
+    # strict=False accepts raw line breaks inside strings, which models often write
+    data = json.loads(text[start : end + 1], strict=False)
     if not isinstance(data, dict):
         raise ValueError("output is not a JSON object")
     return data

@@ -80,6 +80,11 @@ API_QUOTA_EXCEEDED = Counter(
     ["key"],
 )
 
+PII_PLACEHOLDERS_LOST = Counter(
+    "terngi_pii_placeholders_lost_total",
+    "Provider replies rejected because a masked value's placeholder was missing (PII_MASKING)",
+)
+
 P = ParamSpec("P")
 T = TypeVar("T")
 

@@ -19,6 +19,8 @@ def azure_ok(text: str) -> httpx.Response:
 
 
 def chat_reply(text: str) -> httpx.Response:
+    if isinstance(text, dict):
+        text = json.dumps(text, ensure_ascii=False)
     return httpx.Response(200, json={"choices": [{"message": {"content": text}}]})
 
 
@@ -91,7 +93,9 @@ def test_azure_ignores_entries_for_other_target_languages(client):
 def test_llm_prompt_contains_the_glossary(client, monkeypatch):
     monkeypatch.setattr(config, "AZURE_TRANSLATOR_KEYS", [])
     monkeypatch.setattr(config, "TRANSLATION_PROVIDERS", ["groq"])
-    route = respx.post(CHAT_URL).mock(return_value=chat_reply("Ẹ kú àárọ̀ Terngi"))
+    route = respx.post(CHAT_URL).mock(
+        return_value=chat_reply({"translations": ["Ẹ kú àárọ̀ Terngi"]})
+    )
 
     response = client.post(
         "/v1/translate",

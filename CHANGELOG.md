@@ -5,6 +5,48 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **Native-speaker evaluation set** (part of #14): 80 English sentences in 10 everyday
+  domains (`data/terngi-eval`), a place for reviewed references in Yoruba, Hausa, Igbo,
+  Nigerian Pidgin and Fula, and references collected ahead of provider support for Tiv,
+  Efik, Kanuri and Ibibio. `scripts/eval_translation.py` scores the API with chrF++ in both
+  directions, per language and domain (matching sacrebleu, with no new dependency), and the
+  manual **Translation eval** workflow runs it. References are welcome from native speakers.
+- **13 more languages of India, Pakistan and the Maldives**, translated by Azure: Sindhi,
+  Kashmiri, Odia, Assamese, Maithili, Bhojpuri, Konkani, Dogri, Manipuri, Sanskrit, Bodo,
+  Santali and Dhivehi. Terngi AI now supports 109 languages, including all 22 official
+  languages of India.
+- **Optional PII masking** (#142): with `PII_MASKING=true`, e-mail addresses, URLs, phone
+  numbers and long ID numbers are replaced with placeholders (`[[P1]]`, `[[P2]]`…) before
+  text reaches a translation, detection or `/v1/converse` chat provider, and restored in the
+  reply. A provider that drops a placeholder counts as failed and the next one is tried.
+  Off by default. See "If your deployment handles sensitive data" in `docs/DATA.md`.
+- **`FEEDBACK_RETENTION_DAYS`** (#141): feedback records older than this are deleted the next
+  time a record is stored and are never exported. Default 0 (no time limit).
+
+### Security
+- **Moderation reads the whole message and its English translation** (#168): texts longer
+  than Prompt Guard's 512 tokens are classified in overlapping chunks
+  (`MODERATION_CHUNK_CHARS`, at most `MODERATION_MAX_CHUNKS` per check), so an injection after
+  long padding is no longer skipped. A non-English message's English translation is
+  classified too, since Prompt Guard is weaker on many local languages.
+- **`/v1/converse` is moderated and treats its history as untrusted** (#169): the message,
+  its translation and the client-supplied `memory_context` are classified when moderation
+  is on; the model is told client history may not be genuine; and
+  `CONVERSE_ALLOW_ASSISTANT_HISTORY=false` rejects client-written assistant turns.
+- **Prompt-injection regression set** (#170): 43 attacks in 8 languages
+  (`eval/injection/cases.jsonl`), a runner (`scripts/eval_injection.py`) and a weekly,
+  approval-gated workflow. `PROMPT_CANARY` plants a secret in the system prompts of an
+  evaluation deployment so prompt leaks are detectable.
+- **Feedback is redacted before it is stored** (#141): e-mail addresses, URLs, phone numbers
+  and long ID numbers in `source_text`, `translated_text` and `correction` become `[EMAIL]`,
+  `[URL]`, `[PHONE]` and `[ID]`, so raw personal data never reaches the JSONL file or Redis.
+  The patterns moved to `services/pii.py`, shared with `scripts/redact_pii.py`. Records
+  stored before this change are not rewritten; run `scripts/redact_pii.py` over existing
+  feedback if you need them cleaned.
+
+## [1.1.0] - 2026-11-17
+
 ### Changed
 - **Python 3.11 or newer is now required.** Python 3.10 reaches end of life in October 2026,
   and the fixes for six `filelock` advisories (GHSA-v4x8-3wr5-3wq8 and others, a
@@ -12,6 +54,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   client in `clients/python` still supports 3.10.
 
 ### Security
+- **Feedback limits per key** (#140): each API key may store `FEEDBACK_PER_KEY_PER_DAY`
+  feedback records per UTC day (default 200; `429` with `Retry-After` beyond that), and the
+  same rating of the same translation sent again on the same day is ignored
+  (`{"status": "duplicate"}`). One key can no longer fill the shared store or flood the
+  evaluation set. Records sent with a key carry a `submitter` label, a keyed one-way hash
+  made only for feedback, so junk can be filtered out later.
 - `filelock` upgraded to 4.2.4 (GHSA-2g95-wg33-c5x2, GHSA-567q-5qvw-pf92,
   GHSA-9vhv-jxww-xfm5, GHSA-crv4-6mhj-j5jh, GHSA-jqc4-5cvw-7w85, GHSA-v4x8-3wr5-3wq8).
 

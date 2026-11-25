@@ -76,12 +76,12 @@ and one conversation owner. Never use `*` when the API port is reachable directl
 
 ## 3. Languages
 
-**96 languages.** `GET /v1/languages` returns the full list.
+**109 languages.** `GET /v1/languages` returns the full list.
 
 - **African (27):** Yoruba (`yo`), Hausa (`ha`), Igbo (`ig`), Nigerian Pidgin (`pcm`), Swahili (`sw`), Kinyarwanda (`rw`), Shona (`sn`), isiZulu (`zu`), isiXhosa (`xh`), Setswana (`tn`), Afrikaans (`af`), isiNdebele (`nr`), Amharic (`am`), Somali (`so`), Tigrinya (`ti`), Oromo (`om`), Malagasy (`mg`), Lingala (`ln`), Luganda (`lg`), Chichewa (`ny`), Kirundi (`rn`), Sesotho (`st`), Sesotho sa Leboa (`nso`), Wolof (`wo`), Fula (`ff`), Ewe (`ee`), Twi (`tw`)
 - **European (32):** English (`en`), French (`fr`), Spanish (`es`), Portuguese (`pt`), German (`de`), Italian (`it`), Dutch (`nl`), Polish (`pl`), Irish (`ga`), Welsh (`cy`), Swedish (`sv`), Danish (`da`), Norwegian (`nb`), Finnish (`fi`), Icelandic (`is`), Greek (`el`), Czech (`cs`), Slovak (`sk`), Hungarian (`hu`), Romanian (`ro`), Bulgarian (`bg`), Ukrainian (`uk`), Russian (`ru`), Croatian (`hr`), Serbian (`sr-Latn`), Slovenian (`sl`), Lithuanian (`lt`), Latvian (`lv`), Estonian (`et`), Albanian (`sq`), Macedonian (`mk`), Turkish (`tr`)
 - **Middle Eastern (6):** Arabic (`ar`), Hebrew (`he`), Persian (`fa`), Urdu (`ur`), Pashto (`ps`), Kurdish (`ku`)
-- **Asian (31):** Chinese (Simplified) (`zh-Hans`), Chinese (Traditional) (`zh-Hant`), Cantonese (`yue`), Japanese (`ja`), Korean (`ko`), Hindi (`hi`), Bengali (`bn`), Punjabi (`pa`), Tamil (`ta`), Telugu (`te`), Marathi (`mr`), Gujarati (`gu`), Kannada (`kn`), Malayalam (`ml`), Sinhala (`si`), Nepali (`ne`), Thai (`th`), Lao (`lo`), Khmer (`km`), Burmese (`my`), Vietnamese (`vi`), Indonesian (`id`), Malay (`ms`), Filipino (`fil`), Kazakh (`kk`), Uzbek (`uz`), Azerbaijani (`az`), Georgian (`ka`), Armenian (`hy`), Kyrgyz (`ky`), Turkmen (`tk`)
+- **Asian (44):** Chinese (Simplified) (`zh-Hans`), Chinese (Traditional) (`zh-Hant`), Cantonese (`yue`), Japanese (`ja`), Korean (`ko`), Hindi (`hi`), Bengali (`bn`), Punjabi (`pa`), Tamil (`ta`), Telugu (`te`), Marathi (`mr`), Gujarati (`gu`), Kannada (`kn`), Malayalam (`ml`), Sinhala (`si`), Nepali (`ne`), Sindhi (`sd`), Kashmiri (`ks`), Odia (`or`), Assamese (`as`), Maithili (`mai`), Bhojpuri (`bho`), Konkani (`gom`), Dogri (`doi`), Manipuri (`mni`), Sanskrit (`sa`), Bodo (`brx`), Santali (`sat`), Dhivehi (`dv`), Thai (`th`), Lao (`lo`), Khmer (`km`), Burmese (`my`), Vietnamese (`vi`), Indonesian (`id`), Malay (`ms`), Filipino (`fil`), Kazakh (`kk`), Uzbek (`uz`), Azerbaijani (`az`), Georgian (`ka`), Armenian (`hy`), Kyrgyz (`ky`), Turkmen (`tk`)
 
 Which provider handles which language:
 

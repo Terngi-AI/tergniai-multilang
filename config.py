@@ -112,6 +112,20 @@ ASIAN_LANGUAGES = {
     "ml": "Malayalam",
     "si": "Sinhala",
     "ne": "Nepali",
+    # More languages of India, Pakistan and the Maldives (all translated by Azure)
+    "sd": "Sindhi",
+    "ks": "Kashmiri",
+    "or": "Odia",
+    "as": "Assamese",
+    "mai": "Maithili",
+    "bho": "Bhojpuri",
+    "gom": "Konkani",
+    "doi": "Dogri",
+    "mni": "Manipuri",
+    "sa": "Sanskrit",
+    "brx": "Bodo",
+    "sat": "Santali",
+    "dv": "Dhivehi",
     "th": "Thai",
     "lo": "Lao",
     "km": "Khmer",
@@ -270,6 +284,22 @@ if MODERATION_FAIL_MODE not in ("open", "closed"):
         "Unknown MODERATION_FAIL_MODE %r; using 'open'", MODERATION_FAIL_MODE
     )
     MODERATION_FAIL_MODE = "open"
+# Prompt Guard 2 reads only 512 tokens, so longer texts are classified in overlapping chunks
+# of this many characters (#168). 1000 characters stays under 512 tokens even for scripts and
+# diacritics that tokenise poorly. One check classifies at most MODERATION_MAX_CHUNKS chunks;
+# input needing more counts as a classifier failure, so MODERATION_FAIL_MODE decides.
+MODERATION_CHUNK_CHARS = int(os.getenv("MODERATION_CHUNK_CHARS", "1000"))
+MODERATION_CHUNK_OVERLAP = int(os.getenv("MODERATION_CHUNK_OVERLAP", "100"))
+MODERATION_MAX_CHUNKS = int(os.getenv("MODERATION_MAX_CHUNKS", "12"))
+# A secret string planted in the chat and agent system prompts, so the injection evaluation
+# (scripts/eval_injection.py, #170) can tell when a prompt leaks. Set it only on a deployment
+# used for that evaluation; leave it empty everywhere else.
+PROMPT_CANARY = os.getenv("PROMPT_CANARY", "").strip()
+# /v1/converse takes its history from the client. Set to false to reject client-written
+# "assistant" turns, when the caller relays text from untrusted end users (#169).
+CONVERSE_ALLOW_ASSISTANT_HISTORY = (
+    os.getenv("CONVERSE_ALLOW_ASSISTANT_HISTORY", "true").strip().lower() != "false"
+)
 
 # Shared storage. With REDIS_URL set (e.g. redis://localhost:6379/0), the translation cache,
 # rate limits and chat conversations are shared by every replica and survive restarts.
@@ -337,6 +367,16 @@ FEEDBACK_FILE = os.getenv("FEEDBACK_FILE", "feedback.jsonl")
 # Maximum number of feedback records kept. Redis drops the oldest records beyond the cap;
 # the JSONL file refuses new records when full. 0 disables the cap.
 FEEDBACK_MAX_RECORDS = int(os.getenv("FEEDBACK_MAX_RECORDS", "10000"))
+# Feedback records one caller (API key, or IP without API keys) may store per UTC day, so one
+# caller can't fill the store or flood the evaluation set (#140). 0 disables the limit.
+FEEDBACK_PER_KEY_PER_DAY = int(os.getenv("FEEDBACK_PER_KEY_PER_DAY", "200"))
+# Feedback records older than this many days are deleted (#141). 0 keeps them until
+# FEEDBACK_MAX_RECORDS pushes them out.
+FEEDBACK_RETENTION_DAYS = int(os.getenv("FEEDBACK_RETENTION_DAYS", "0"))
+
+# Replace e-mails, phone numbers, URLs and long ID numbers with placeholders before text is
+# sent to a translation or chat provider, and restore them in the reply (#142). Off by default.
+PII_MASKING = os.getenv("PII_MASKING", "false").strip().lower() == "true"
 
 # Client authentication: comma-separated keys accepted in the X-API-Key header.
 # Leave empty to disable authentication (e.g. for local development).

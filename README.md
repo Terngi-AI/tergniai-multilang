@@ -9,23 +9,40 @@
 [![Good first issues](https://img.shields.io/github/issues/Terngi-AI/tergniai-multilang/good%20first%20issue?label=good%20first%20issues&color=7057ff)](https://github.com/Terngi-AI/tergniai-multilang/labels/good%20first%20issue)
 [![GitHub stars](https://img.shields.io/github/stars/Terngi-AI/tergniai-multilang?style=social)](https://github.com/Terngi-AI/tergniai-multilang/stargazers)
 
-**Open-source translation and AI conversation for Nigerian languages.**
+**Open-source translation and AI conversation in 109 languages.**
 
-A **conversational AI** and translation API for **96 languages**, built
-African-first: Yoruba, Hausa, Igbo, Nigerian Pidgin, Swahili, Amharic, isiZulu and 20 more
-African languages, plus Arabic, Chinese, Spanish, French, Hindi, Japanese, Polish, Dutch, Irish
-and the other major world languages. It can use several providers at once:
+A **conversational AI** and translation API that speaks to people in the language they
+understand: widely spoken world languages and the local languages most software still
+leaves out. It covers languages across Africa, Europe, the Middle East and Asia, from
+Spanish, Arabic, Hindi and Chinese to Swahili, Tigrinya, Welsh, Sindhi, Odia and Khmer. See the full
+list with `GET /v1/languages`.
+
+It can use several providers at once:
 [Azure Translator](https://learn.microsoft.com/azure/ai-services/translator/),
 [Groq](https://groq.com/) or any OpenAI-compatible API, and
-[MORENA](https://huggingface.co/vamboai/morena-1.5b-instruct), an open African-language model
-you can run for free.
+[MORENA](https://huggingface.co/vamboai/morena-1.5b-instruct), an open model for local
+languages that you can run for free.
 
 ## Why this project?
 
-More than 100 million people speak Yoruba, Hausa or Igbo, yet these languages are still
-poorly served by most software. Terngi AI gives developers a simple, self-hostable API to
-build apps, chatbots and services that speak to people in their own language, and it is
-built in the open so native speakers and developers can improve it together.
+Help often exists, but language decides who gets it. A patient at a pharmacy, a parent
+reading a letter from school, a customer calling their bank: when the message isn't in a
+language they understand, it doesn't reach them. Hundreds of millions of people speak languages that
+most software serves poorly or not at all.
+
+Terngi AI gives developers a simple, self-hostable API to build apps, chatbots and services
+that speak to people in their own language, in health, education, finance, customer support,
+travel and public services. It is built in the open, so native speakers and developers
+anywhere can improve it together.
+
+### Languages
+
+| Region | Languages |
+|---|---|
+| Africa (27) | Swahili, Yoruba, Hausa, Igbo, Nigerian Pidgin, Amharic, Somali, Tigrinya, Oromo, isiZulu, isiXhosa, Shona, Kinyarwanda, Wolof, Twi and more |
+| Europe (32) | English, French, Spanish, Portuguese, German, Italian, Polish, Romanian, Ukrainian, Irish, Welsh and more |
+| Middle East (6) | Arabic, Hebrew, Persian, Urdu, Pashto, Kurdish |
+| Asia (44) | Hindi, Bengali, Punjabi, Tamil, Telugu, Marathi, Sindhi, Kashmiri, Odia, Assamese, Maithili, Bhojpuri, Nepali, Sinhala, Dhivehi, Chinese, Cantonese, Japanese, Korean, Vietnamese, Indonesian, Filipino, Khmer and more. All 22 official languages of India are covered |
 
 ⭐ **If this is useful to you, star the repo** — it helps more people find it.
 
@@ -43,7 +60,7 @@ built in the open so native speakers and developers can improve it together.
 - **WhatsApp bot**: people message your WhatsApp number in any supported language and get
   answers in that language, with memory; plus an endpoint to send messages. See
   [docs/WHATSAPP.md](docs/WHATSAPP.md)
-- **Free, local African-language model** — run [MORENA](docs/MORENA.md) with llama.cpp
+- **Free, local model** — run [MORENA](docs/MORENA.md) with llama.cpp for its 14 languages, no API keys needed
 - **Translate** text between any two supported languages, one at a time or in batches
 - **Auto-detect** the source language — pass `"from_language": "auto"` to any endpoint
 - **Converse** in any supported language; the reply comes back in the target language,
@@ -57,6 +74,18 @@ built in the open so native speakers and developers can improve it together.
 - Input validation, upstream timeouts and consistent JSON error responses
 - Liveness (`/health`) and readiness (`/health/ready`) probes
 - Docker image with a health check, running as a non-root user
+
+## Open source and Terngi Kasa
+
+Terngi AI is free and MIT licensed, and it stays that way:
+
+- The translation and conversation API, including glossaries, API keys and per-key usage limits
+- Support for Azure, Groq and any OpenAI-compatible provider
+- Self-hosted MORENA setup and docs
+- All 109 languages
+
+Would rather not run it yourself? **[Terngi Kasa](https://terngiai.com/developers)** is our
+hosted service for organisations. [Talk to us](https://terngiai.com/contact).
 
 ## Quick start
 
@@ -182,6 +211,11 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `PROMPT_GUARD_MODEL` | no | `meta-llama/llama-prompt-guard-2-86m` | Classifier model for chat/agent moderation; does not need to be listed in a provider's MODELS, and is never tried as a chat fallback |
 | `MODERATION_THRESHOLD` | no | `0.5` | Score at or above which the classifier's probability counts as an injection |
 | `MODERATION_FAIL_MODE` | no | `open` | What happens if the classifier is unreachable: `open` lets the request through, `closed` refuses with `503` |
+| `MODERATION_CHUNK_CHARS` | no | `1000` | Longer texts are classified in overlapping chunks of this many characters (Prompt Guard reads 512 tokens) |
+| `MODERATION_CHUNK_OVERLAP` | no | `100` | Characters shared by neighbouring chunks |
+| `MODERATION_MAX_CHUNKS` | no | `12` | Most chunks classified per check; input needing more counts as a classifier failure (`MODERATION_FAIL_MODE` decides) |
+| `CONVERSE_ALLOW_ASSISTANT_HISTORY` | no | `true` | `false` rejects client-written `assistant` turns in `/v1/converse` `memory_context` with `400` |
+| `PROMPT_CANARY` | no | *(empty)* | Only on a deployment used for the injection evaluation: a secret planted in the chat and agent system prompts so leaks are detectable |
 | `CORS_ORIGINS` | no | *(disabled)* | Comma-separated allowed origins |
 | `FORWARDED_ALLOW_IPS` | no | `127.0.0.1,::1` | Proxy IPs/CIDRs trusted to set `X-Forwarded-For` |
 | `LOG_LEVEL` | no | `INFO` | Python log level. Upstream error *bodies* are only logged at `DEBUG` (they can echo user text); `INFO` logs the status, error code and request ID |
@@ -196,13 +230,14 @@ each model is tried in order, and keys rotate between requests. A key that is re
 unusable output is skipped for that request. The app starts without keys; endpoints with
 no configured provider return `503`.
 
-**Moderation:** when `MODERATION_PROVIDERS` is set, user messages and agent tool results
-are classified before the chat model sees them. Groq answers the classifier with a
+**Moderation:** when `MODERATION_PROVIDERS` is set, user messages (and their English
+translation), agent tool results and `/v1/converse` history are classified before the chat
+model sees them. Groq answers the classifier with a
 probability score (near 1 = injection), compared against `MODERATION_THRESHOLD`;
 label-based answers ("INJECTION"/"MALICIOUS") from other deployments are matched as a
 fallback. The guard model does not need to be listed in the provider's MODELS and is
-never tried as a chat fallback: a guard verdict is not an answer. Note that Prompt Guard
-2 has a 512-token context, so only the beginning of very long messages is classified.
+never tried as a chat fallback: a guard verdict is not an answer. Prompt Guard 2 reads only
+512 tokens, so longer texts are classified in overlapping chunks (`MODERATION_CHUNK_CHARS`).
 
 JSON requests share one `REQUEST_DEADLINE_SECONDS` wall-clock budget and one
 `REQUEST_MAX_UPSTREAM_ATTEMPTS` cap across retries, provider fallbacks and agent steps.
@@ -460,7 +495,7 @@ daily. See [SECURITY.md](SECURITY.md#automated-security-scanning).
 Contributions of every size are welcome, and you don't need to be an expert:
 
 - 🟢 **New here?** Pick a [good first issue](https://github.com/Terngi-AI/tergniai-multilang/labels/good%20first%20issue).
-- 🗣️ **Speak Yoruba, Hausa, Igbo or another Nigerian language?** Help review translations
+- 🗣️ **Speak a language other than English?** Help review translations in your language
   and build our [evaluation set](https://github.com/Terngi-AI/tergniai-multilang/labels/languages). Native speakers are our most valuable contributors.
 - 🛠️ **Experienced developer?** See [help wanted](https://github.com/Terngi-AI/tergniai-multilang/labels/help%20wanted) for streaming, Redis, speech and more.
 - 💬 **Questions or ideas?** Start a conversation in [Discussions](https://github.com/Terngi-AI/tergniai-multilang/discussions).
