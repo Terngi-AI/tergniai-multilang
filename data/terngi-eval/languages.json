@@ -1,0 +1,11 @@
+[
+  {"code": "yo", "name": "Yoruba", "status": "supported"},
+  {"code": "ha", "name": "Hausa", "status": "supported"},
+  {"code": "ig", "name": "Igbo", "status": "supported"},
+  {"code": "pcm", "name": "Nigerian Pidgin", "status": "supported"},
+  {"code": "ff", "name": "Fula (Nigerian Fulfulde)", "status": "supported"},
+  {"code": "tiv", "name": "Tiv", "status": "collecting"},
+  {"code": "efi", "name": "Efik", "status": "collecting"},
+  {"code": "knc", "name": "Kanuri (Central)", "status": "collecting"},
+  {"code": "ibb", "name": "Ibibio", "status": "collecting"}
+]

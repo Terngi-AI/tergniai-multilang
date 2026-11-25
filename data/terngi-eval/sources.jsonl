@@ -1,0 +1,80 @@
+{"id": "greetings-01", "domain": "greetings", "text": "Good morning. Did you sleep well?"}
+{"id": "greetings-02", "domain": "greetings", "text": "Welcome, please come in and sit down."}
+{"id": "greetings-03", "domain": "greetings", "text": "Thank you very much for your help yesterday."}
+{"id": "greetings-04", "domain": "greetings", "text": "How is your family? I hope everyone is well."}
+{"id": "greetings-05", "domain": "greetings", "text": "Congratulations on the birth of your baby."}
+{"id": "greetings-06", "domain": "greetings", "text": "Sorry for your loss. We are with you in prayer."}
+{"id": "greetings-07", "domain": "greetings", "text": "Have a safe journey and greet everyone at home for me."}
+{"id": "greetings-08", "domain": "greetings", "text": "It was nice to meet you. See you next week."}
+{"id": "health-01", "domain": "health", "text": "Take one tablet twice a day after food for five days."}
+{"id": "health-02", "domain": "health", "text": "Do not give this medicine to children under 12 years old."}
+{"id": "health-03", "domain": "health", "text": "Drink plenty of clean water and rest at home."}
+{"id": "health-04", "domain": "health", "text": "If the fever lasts more than three days, come back to the clinic."}
+{"id": "health-05", "domain": "health", "text": "Your next antenatal appointment is on Tuesday at 9 in the morning."}
+{"id": "health-06", "domain": "health", "text": "Wash your hands with soap before eating and after using the toilet."}
+{"id": "health-07", "domain": "health", "text": "Sleep under a treated mosquito net every night."}
+{"id": "health-08", "domain": "health", "text": "Bring your vaccination card when you come with your child."}
+{"id": "emergency-01", "domain": "emergency", "text": "Call an ambulance immediately; she is not breathing."}
+{"id": "emergency-02", "domain": "emergency", "text": "There is a fire in the market. Leave the building now."}
+{"id": "emergency-03", "domain": "emergency", "text": "Do not touch the electric wire on the ground."}
+{"id": "emergency-04", "domain": "emergency", "text": "Is anyone hurt? Stay where you are, help is coming."}
+{"id": "emergency-05", "domain": "emergency", "text": "The road is flooded. Please use another route."}
+{"id": "emergency-06", "domain": "emergency", "text": "Keep the injured person warm and do not give them anything to eat."}
+{"id": "emergency-07", "domain": "emergency", "text": "If you see smoke, stay low and cover your mouth."}
+{"id": "emergency-08", "domain": "emergency", "text": "Go to the nearest police station and report what happened."}
+{"id": "money-01", "domain": "money", "text": "You can pay the school fees by bank transfer or mobile money."}
+{"id": "money-02", "domain": "money", "text": "The price of a bag of rice has gone up this month."}
+{"id": "money-03", "domain": "money", "text": "Please keep your receipt; you will need it for a refund."}
+{"id": "money-04", "domain": "money", "text": "Never share your PIN with anyone, not even a bank worker."}
+{"id": "money-05", "domain": "money", "text": "The loan must be repaid in six monthly instalments."}
+{"id": "money-06", "domain": "money", "text": "We sold 40 baskets of tomatoes at the market today."}
+{"id": "money-07", "domain": "money", "text": "How much does it cost to send money to my mother in the village?"}
+{"id": "money-08", "domain": "money", "text": "Your account has been credited with 5,000 naira."}
+{"id": "government-01", "domain": "government", "text": "Voter registration closes on 15 March."}
+{"id": "government-02", "domain": "government", "text": "Bring two passport photographs and a copy of your birth certificate."}
+{"id": "government-03", "domain": "government", "text": "The town hall meeting will hold on Saturday at 4 in the afternoon."}
+{"id": "government-04", "domain": "government", "text": "Waste will be collected every Monday and Thursday morning."}
+{"id": "government-05", "domain": "government", "text": "Applications for the farming grant are now open."}
+{"id": "government-06", "domain": "government", "text": "The water supply will be off from 10 a.m. to 2 p.m. tomorrow."}
+{"id": "government-07", "domain": "government", "text": "Every child between the ages of 6 and 15 has a right to free education."}
+{"id": "government-08", "domain": "government", "text": "Please queue here to collect your identity card."}
+{"id": "education-01", "domain": "education", "text": "School resumes on Monday, the 8th of January."}
+{"id": "education-02", "domain": "education", "text": "Read the story and answer the questions that follow."}
+{"id": "education-03", "domain": "education", "text": "Parents are invited to a meeting with the teachers on Friday."}
+{"id": "education-04", "domain": "education", "text": "Your child did very well in mathematics this term."}
+{"id": "education-05", "domain": "education", "text": "Homework must be submitted before the end of the week."}
+{"id": "education-06", "domain": "education", "text": "The library is open from 8 in the morning until 5 in the evening."}
+{"id": "education-07", "domain": "education", "text": "Write a short letter to a friend about your holiday."}
+{"id": "education-08", "domain": "education", "text": "Exams will start in two weeks; please start revising now."}
+{"id": "farming-01", "domain": "farming", "text": "Plant the maize seeds when the first rains begin."}
+{"id": "farming-02", "domain": "farming", "text": "Spray the crops early in the morning when there is no wind."}
+{"id": "farming-03", "domain": "farming", "text": "Store the harvested grain in a cool, dry place."}
+{"id": "farming-04", "domain": "farming", "text": "The cattle need water at least twice a day during the dry season."}
+{"id": "farming-05", "domain": "farming", "text": "Mix the fertiliser with the soil before you plant."}
+{"id": "farming-06", "domain": "farming", "text": "Yams grow well in loose, well-drained soil."}
+{"id": "farming-07", "domain": "farming", "text": "The cooperative will buy cassava at a fixed price this season."}
+{"id": "farming-08", "domain": "farming", "text": "Keep goats away from the young plants."}
+{"id": "transport-01", "domain": "transport", "text": "The bus to the city leaves at 6 o'clock every morning."}
+{"id": "transport-02", "domain": "transport", "text": "How much is the fare from here to the motor park?"}
+{"id": "transport-03", "domain": "transport", "text": "Please stop at the next junction."}
+{"id": "transport-04", "domain": "transport", "text": "The bridge is closed for repairs until next month."}
+{"id": "transport-05", "domain": "transport", "text": "Fasten your seat belt and do not use your phone while driving."}
+{"id": "transport-06", "domain": "transport", "text": "Motorcycles are not allowed on this road after 7 p.m."}
+{"id": "transport-07", "domain": "transport", "text": "I missed the last bus; is there another way to get home?"}
+{"id": "transport-08", "domain": "transport", "text": "The train was delayed by two hours because of the rain."}
+{"id": "daily_life-01", "domain": "daily_life", "text": "Please buy bread and eggs on your way back."}
+{"id": "daily_life-02", "domain": "daily_life", "text": "The light has gone off again; let's use the lantern."}
+{"id": "daily_life-03", "domain": "daily_life", "text": "My phone battery is almost dead. Can I charge it here?"}
+{"id": "daily_life-04", "domain": "daily_life", "text": "We are cooking jollof rice for the party on Sunday."}
+{"id": "daily_life-05", "domain": "daily_life", "text": "Can you help me carry these bags to the car?"}
+{"id": "daily_life-06", "domain": "daily_life", "text": "The children are playing football in the compound."}
+{"id": "daily_life-07", "domain": "daily_life", "text": "It is very hot today; let's sit under the tree."}
+{"id": "daily_life-08", "domain": "daily_life", "text": "I will call you when I get home."}
+{"id": "work-01", "domain": "work", "text": "The meeting has been moved to Wednesday afternoon."}
+{"id": "work-02", "domain": "work", "text": "Please send me the report before 3 p.m."}
+{"id": "work-03", "domain": "work", "text": "We are hiring two cleaners and one security guard."}
+{"id": "work-04", "domain": "work", "text": "Your first salary will be paid at the end of the month."}
+{"id": "work-05", "domain": "work", "text": "Wear your safety boots and helmet on the building site."}
+{"id": "work-06", "domain": "work", "text": "The shop will close early today for stocktaking."}
+{"id": "work-07", "domain": "work", "text": "Thank you for your application; we will contact you soon."}
+{"id": "work-08", "domain": "work", "text": "Please sign in when you arrive and sign out when you leave."}
