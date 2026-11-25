@@ -175,49 +175,49 @@ async def _stream_chat(
     stream_usage: Dict[str, int] = {}
     deadline.consume_attempt()
     try:
-        async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
-            async with client.stream(
-                "POST",
-                url,
-                headers=headers,
-                json=body,
-                timeout=deadline.timeout(config.REQUEST_TIMEOUT),
-            ) as response:
-                if response.status_code != 200:
-                    await response.aread()
-                    _check_status(response, provider, key)
-                async for line in response.aiter_lines():
-                    deadline.check()
-                    if not line.startswith("data:"):
-                        continue
-                    data = line[len("data:") :].strip()
-                    if data == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(data)
-                        usage_chunk = chunk.get("usage")
-                        if isinstance(usage_chunk, dict):
-                            stream_usage = usage_chunk
-                        delta = chunk["choices"][0].get("delta") or {}
-                    except (ValueError, LookupError, TypeError):
-                        continue  # keep-alives and provider-specific extras
-                    text = delta.get("content")
-                    if text:
-                        content.append(text)
-                        await on_token(text)
-                    for part in delta.get("tool_calls") or []:
-                        call = tool_calls.setdefault(
-                            part.get("index", len(tool_calls)),
-                            {
-                                "id": "",
-                                "type": "function",
-                                "function": {"name": "", "arguments": ""},
-                            },
-                        )
-                        call["id"] = part.get("id") or call["id"]
-                        function = part.get("function") or {}
-                        call["function"]["name"] += function.get("name") or ""
-                        call["function"]["arguments"] += function.get("arguments") or ""
+        client = await get_http_client()
+        async with client.stream(
+            "POST",
+            url,
+            headers=headers,
+            json=body,
+            timeout=deadline.timeout(config.REQUEST_TIMEOUT),
+        ) as response:
+            if response.status_code != 200:
+                await response.aread()
+                _check_status(response, provider, key)
+            async for line in response.aiter_lines():
+                deadline.check()
+                if not line.startswith("data:"):
+                    continue
+                data = line[len("data:") :].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data)
+                    usage_chunk = chunk.get("usage")
+                    if isinstance(usage_chunk, dict):
+                        stream_usage = usage_chunk
+                    delta = chunk["choices"][0].get("delta") or {}
+                except (ValueError, LookupError, TypeError):
+                    continue  # keep-alives and provider-specific extras
+                text = delta.get("content")
+                if text:
+                    content.append(text)
+                    await on_token(text)
+                for part in delta.get("tool_calls") or []:
+                    call = tool_calls.setdefault(
+                        part.get("index", len(tool_calls)),
+                        {
+                            "id": "",
+                            "type": "function",
+                            "function": {"name": "", "arguments": ""},
+                        },
+                    )
+                    call["id"] = part.get("id") or call["id"]
+                    function = part.get("function") or {}
+                    call["function"]["name"] += function.get("name") or ""
+                    call["function"]["arguments"] += function.get("arguments") or ""
     except httpx.HTTPError as e:
         raise _ModelFailed(f"connection error: {type(e).__name__}", unreachable=True) from e
 

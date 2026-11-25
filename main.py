@@ -38,14 +38,6 @@ async def lifespan(app: FastAPI):
     await close_http_client()
 
 
-app = FastAPI(
-    title="Terngi Translation API",
-    description="Translation, conversation and a multilingual A...",
-    version="1.0.0",
-    lifespan=lifespan,
-)
-
-
 def check_authentication() -> None:
     """
     Refuse to run with authentication disabled outside an explicitly allowed setup
@@ -121,6 +113,7 @@ app = FastAPI(
     description="Translation, conversation and a multilingual AI agent for local languages",
     version="1.1.0",
     openapi_tags=OPENAPI_TAGS,
+    lifespan=lifespan,
 )
 
 # Middleware runs in reverse order of registration:

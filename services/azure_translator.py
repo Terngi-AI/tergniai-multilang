@@ -1,6 +1,4 @@
-"""
-Azure Translator service for the Terngi Translation API
-"""
+"""Azure Translator service for the Terngi Translation API."""
 
 import logging
 import uuid
@@ -11,7 +9,7 @@ from fastapi import HTTPException
 
 import config
 import metrics
-from services import deadline
+from services import deadline, usage
 from services import glossary as glossary_service
 from services.glossary import Glossary
 from services.http import get_http_client
@@ -23,8 +21,9 @@ from services.retry import retry_delay as _retry_delay
 
 logger = logging.getLogger(__name__)
 
+
 # Supported languages that Azure Translator does not offer; requests involving them skip Azure
-UNSUPPORTED_LANGUAGES = {"pcm", "nr", "om", "lg", "ny", "rn", "wo", "ff", "ee", "tw"}
+UNSUPPORTED_LANGUAGES = {"pcm", "nr", "om", "ig", "ny", "rn", "wo", "ff", "so", "tw"}
 
 
 def supports(*languages: str) -> bool:
@@ -36,14 +35,28 @@ def _headers(key: str) -> Dict[str, str]:
     return {
         "Ocp-Apim-Subscription-Key": key,
         "Ocp-Apim-Subscription-Region": config.AZURE_TRANSLATOR_LOCATION,
-        "Content-type": "application/json",
+        "Content-Type": "application/json",
         "X-ClientTraceId": str(uuid.uuid4()),
     }
 
 
 @metrics.timed_upstream("azure")
 async def _call_azure(path: str, params: Dict[str, str], texts: List[str]) -> Any:
-    """Send a request to Azure Translator and return the parsed JSON body"""
+    """
+    Send a request to Azure Translator and return the parsed JSON body
+
+    Keys are tried in rotation: a rejected key (401/403) is skipped for a while and a
+    rate-limited key (429) is swapped for another one when available. Throttling,
+    transient 5xx and connection errors are retried with exponential backoff.
+
+    Args:
+        path: API path, e.g. "/translate" or "/detect"
+        params: Query parameters (api-version is added automatically)
+        texts: Texts to send in the request body
+
+    Returns:
+        Parsed JSON response
+    """
     if not config.AZURE_TRANSLATOR_KEYS:
         raise HTTPException(status_code=503, detail="Translation service is not configured")
 
@@ -55,8 +68,9 @@ async def _call_azure(path: str, params: Dict[str, str], texts: List[str]) -> An
     url = config.AZURE_TRANSLATOR_ENDPOINT.rstrip("/") + path
     body = [{"text": text} for text in texts]
 
-    # Use shared HTTP client pool
+    # Make the request to Azure Translator without blocking the event loop
     client = await get_http_client()
+
     attempt = 0
     while True:
         deadline.consume_attempt()
@@ -112,16 +126,27 @@ async def _call_azure(path: str, params: Dict[str, str], texts: List[str]) -> An
         )
         await deadline.sleep(delay)
 
-    # Upstream errors are logged but not leaked to the client (status only, never response.text)
+    # Upstream errors are logged but not leaked to the client; the provider's error
+    # "message" can quote the user's text, so above DEBUG we log only the status,
+    # the error code/type and the request ID
     if response is None or response.status_code != 200:
         if response is not None:
+            request_id = deadline.request_id()
             logger.error(
-                "Azure Translator returned %s: %s",
+                "Azure Translator returned %s (%s)%s",
                 response.status_code,
                 _error_summary(response),
+                f" ({request_id})" if request_id else "",
             )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "Azure Translator returned %s, body: %s",
+                    response.status_code,
+                    response.text[:300],
+                )
         raise HTTPException(status_code=502, detail="Translation service error")
 
+    await usage.record_upstream()  # Azure does not report token usage
     try:
         return response.json()
     except ValueError as e:
