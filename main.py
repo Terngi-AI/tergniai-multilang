@@ -4,6 +4,7 @@ Main application entry point for Terngi Translation API
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from typing import Any, Dict
 
 import uvicorn
@@ -21,12 +22,20 @@ from config import CORS_ORIGINS, MAX_REQUEST_BYTES
 
 # Import routers
 from routes import agent, base, chat, conversation, feedback, translation, whatsapp
+from services.http import close_http_client, init_http_client
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_http_client()
+    yield
+    await close_http_client()
 
 
 def check_authentication() -> None:
@@ -104,6 +113,7 @@ app = FastAPI(
     description="Translation, conversation and a multilingual AI agent for local languages",
     version="1.1.0",
     openapi_tags=OPENAPI_TAGS,
+    lifespan=lifespan,
 )
 
 # Middleware runs in reverse order of registration:

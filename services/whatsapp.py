@@ -20,6 +20,7 @@ from fastapi import HTTPException
 import config
 from services import conversations, deadline, identifiers
 from services.agent import run_agent
+from services.http import get_http_client
 from services.retry import RETRY_STATUS_CODES, retry_delay
 from services.store import StoreError, make_store
 from services.text import normalize_text
@@ -111,24 +112,24 @@ async def _post(payload: Dict[str, Any]) -> str:
     url = f"{config.WHATSAPP_GRAPH_URL}/{config.WHATSAPP_PHONE_NUMBER_ID}/messages"
     headers = {"Authorization": f"Bearer {config.WHATSAPP_ACCESS_TOKEN}"}
     body = {"messaging_product": "whatsapp", **payload}
-    async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
-        for attempt in range(config.UPSTREAM_MAX_RETRIES + 1):
-            deadline.consume_attempt()
-            try:
-                response = await client.post(
-                    url,
-                    json=body,
-                    headers=headers,
-                    timeout=deadline.timeout(config.REQUEST_TIMEOUT),
-                )
-            except httpx.HTTPError as e:
-                raise WhatsAppError(f"Can't reach WhatsApp: {type(e).__name__}") from e
-            if response.status_code not in RETRY_STATUS_CODES:
-                break
-            delay = retry_delay(attempt, response)
-            if delay is None or attempt == config.UPSTREAM_MAX_RETRIES:
-                break
-            await deadline.sleep(delay)
+    client = await get_http_client()
+    for attempt in range(config.UPSTREAM_MAX_RETRIES + 1):
+        deadline.consume_attempt()
+        try:
+            response = await client.post(
+                url,
+                json=body,
+                headers=headers,
+                timeout=deadline.timeout(config.REQUEST_TIMEOUT),
+            )
+        except httpx.HTTPError as e:
+            raise WhatsAppError(f"Can't reach WhatsApp: {type(e).__name__}") from e
+        if response.status_code not in RETRY_STATUS_CODES:
+            break
+        delay = retry_delay(attempt, response)
+        if delay is None or attempt == config.UPSTREAM_MAX_RETRIES:
+            break
+        await deadline.sleep(delay)
     if response.status_code != 200:
         try:
             detail = response.json().get("error", {}).get("message", "")
