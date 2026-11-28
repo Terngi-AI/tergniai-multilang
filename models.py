@@ -77,6 +77,13 @@ class TranslationResponse(BaseModel):
     from_language: str
     to_language: str
     original_text: NfcText
+    verified: bool = Field(
+        True,
+        description=(
+            "False when every provider's translation failed the output checks (changed numbers, "
+            "missing links, added commentary) and the best one was returned anyway: have it checked"
+        ),
+    )
 
 
 class MemoryMessage(BaseModel):
@@ -124,6 +131,10 @@ class BatchTranslationResponse(BaseModel):
     translations: List[NfcText]
     from_language: str
     to_language: str
+    verified: bool = Field(
+        True,
+        description="False when the translations failed the output checks; see /v1/translate",
+    )
 
 
 class DetectionRequest(BaseModel):

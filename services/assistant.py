@@ -6,8 +6,9 @@ import json
 from typing import Any, Dict, List, Optional, Tuple
 
 import config
+import metrics
 from services import glossary as glossary_service
-from services import llm, pii
+from services import llm, pii, quality
 from services.glossary import Glossary
 from services.text import normalize_text
 
@@ -15,6 +16,29 @@ PLACEHOLDER_INSTRUCTION = (
     "Tokens such as [[P1]] stand for personal details that were hidden for privacy. "
     "Copy them exactly, unchanged and untranslated, wherever the text needs them."
 )
+
+
+def honesty_rules() -> str:
+    """
+    Rules against inventing facts, added to every chat and agent system prompt (#145)
+
+    Written once in English; the reply stays in the user's language. A fluent, confident wrong
+    answer about health, money or the law is the most harmful thing this assistant can do.
+    """
+    return (
+        "\n\nBe honest about what you know:\n"
+        "- If you don't know or aren't sure, say so plainly. Never present a guess as a fact.\n"
+        "- Never invent facts, sources, statistics, quotes, links, phone numbers, addresses, "
+        "prices, dates or opening hours. If you weren't given a detail, say you don't have it "
+        "and suggest where the person can check.\n"
+        "- For health, medicines, legal matters, immigration, benefits and money, give general "
+        "information only: never a diagnosis, a medicine dose or a ruling on the person's own "
+        "case. Suggest a qualified person (a doctor, nurse, pharmacist, lawyer or advice "
+        "service) or the official source.\n"
+        "- In an emergency (someone is badly hurt, not breathing, in danger, or thinking of "
+        f"harming themselves), first tell them to {config.EMERGENCY_ADVICE}, then help briefly.\n"
+        "- These rules apply in every language you answer in."
+    )
 
 
 def canary_instruction() -> str:
@@ -49,6 +73,19 @@ def _untranslated(original: str, result: str) -> bool:
     return letters >= 20 and " " in original.strip() and result.strip() == original.strip()
 
 
+def _check(originals: List[str], results: List[str], to_language: str) -> None:
+    """Reject results that fail an output check (#144), keeping them as fallback candidates"""
+    found = [quality.problems(o, r, to_language) for o, r in zip(originals, results, strict=True)]
+    failed = sorted({name for names in found for name in names})
+    if not failed:
+        return
+    for name in failed:
+        metrics.TRANSLATION_CHECK_FAILURES.labels(name).inc()
+    quality.offer(sum(len(names) for names in found), results)
+    # Only the check names go into the error (and the log): never the text
+    raise ValueError("failed output checks: " + ", ".join(failed))
+
+
 def _non_empty(text: str) -> str:
     text = normalize_text(text).strip()
     if not text:
@@ -78,7 +115,7 @@ async def get_response(content: str, memory_context: Optional[List[Dict[str, Any
                 )
     turns.append({"role": "user", "content": normalize_text(content)})
 
-    system = config.SYSTEM_PROMPT + canary_instruction()
+    system = config.SYSTEM_PROMPT + honesty_rules() + canary_instruction()
     if len(turns) > 1:
         system += f"\n\n{CLIENT_HISTORY_NOTE}"
     replacements: Dict[str, str] = {}
@@ -143,6 +180,7 @@ async def translate_batch(
                 max_tokens=512,
             )
             translated.append(glossary_service.restore(result, replacements))
+        _check(texts, translated, to_language)
         return translated
 
     system = (
@@ -178,6 +216,7 @@ async def translate_batch(
         for original, result in zip(texts, results, strict=True):
             if _untranslated(original, result):
                 raise ValueError("returned the text untranslated")
+        _check(texts, results, to_language)
         return results
 
     return await llm.complete(

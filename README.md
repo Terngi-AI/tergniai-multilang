@@ -203,6 +203,8 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `RATE_LIMIT_PER_MINUTE` | no | `60` | Requests per minute per client; `0` disables |
 | `AUTH_FAILURES_PER_MINUTE` | no | `10` | Failed API-key attempts allowed per IP per minute; `0` disables |
 | `CACHE_TTL_SECONDS` | no | `3600` | Translation cache lifetime; `0` disables |
+| `TRANSLATION_CHECKS` | no | `true` | Check every LLM translation for changed numbers, lost links and added commentary, and try the next model when one fails ([USAGE.md](docs/USAGE.md#translate-post-v1translate)) |
+| `TRANSLATION_MIN_LENGTH_RATIO` / `TRANSLATION_MAX_LENGTH_RATIO` | no | `0.25` / `4` | A translation shorter or longer than this, relative to the source, fails the checks (the minimum is skipped for Chinese, Japanese and Korean) |
 | `CACHE_MAX_ITEMS` | no | `1000` | Max cached translations |
 | `CACHE_SCOPE` | no | `key` when `API_KEYS` is set, else `global` | `key`: each API key has its own translation cache, so one caller can't tell (from cache timing) whether another caller recently translated a text. `global`: one shared cache for everyone - more quota reuse, no isolation |
 | `MAX_BATCH_SIZE` | no | `25` | Max texts per batch request |
@@ -216,6 +218,7 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `MODERATION_CHUNK_OVERLAP` | no | `100` | Characters shared by neighbouring chunks |
 | `MODERATION_MAX_CHUNKS` | no | `12` | Most chunks classified per check; input needing more counts as a classifier failure (`MODERATION_FAIL_MODE` decides) |
 | `CONVERSE_ALLOW_ASSISTANT_HISTORY` | no | `true` | `false` rejects client-written `assistant` turns in `/v1/converse` `memory_context` with `400` |
+| `EMERGENCY_ADVICE` | no | *(generic)* | What the assistant tells people to do in an emergency, e.g. `call 112 or go to the nearest hospital right away` (see [docs/AGENT.md](docs/AGENT.md#what-the-assistant-will-and-wont-do)) |
 | `PROMPT_CANARY` | no | *(empty)* | Only on a deployment used for the injection evaluation: a secret planted in the chat and agent system prompts so leaks are detectable |
 | `CORS_ORIGINS` | no | *(disabled)* | Comma-separated allowed origins |
 | `FORWARDED_ALLOW_IPS` | no | `127.0.0.1,::1` | Proxy IPs/CIDRs trusted to set `X-Forwarded-For` |
