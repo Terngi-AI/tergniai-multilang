@@ -215,6 +215,7 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `MODERATION_CHUNK_OVERLAP` | no | `100` | Characters shared by neighbouring chunks |
 | `MODERATION_MAX_CHUNKS` | no | `12` | Most chunks classified per check; input needing more counts as a classifier failure (`MODERATION_FAIL_MODE` decides) |
 | `CONVERSE_ALLOW_ASSISTANT_HISTORY` | no | `true` | `false` rejects client-written `assistant` turns in `/v1/converse` `memory_context` with `400` |
+| `EMERGENCY_ADVICE` | no | *(generic)* | What the assistant tells people to do in an emergency, e.g. `call 112 or go to the nearest hospital right away` (see [docs/AGENT.md](docs/AGENT.md#what-the-assistant-will-and-wont-do)) |
 | `PROMPT_CANARY` | no | *(empty)* | Only on a deployment used for the injection evaluation: a secret planted in the chat and agent system prompts so leaks are detectable |
 | `CORS_ORIGINS` | no | *(disabled)* | Comma-separated allowed origins |
 | `FORWARDED_ALLOW_IPS` | no | `127.0.0.1,::1` | Proxy IPs/CIDRs trusted to set `X-Forwarded-For` |

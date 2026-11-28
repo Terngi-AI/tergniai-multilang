@@ -466,6 +466,13 @@ WHATSAPP_MEMORY_TTL_SECONDS = int(os.getenv("WHATSAPP_MEMORY_TTL_SECONDS", str(3
 WHATSAPP_MAX_USERS = int(os.getenv("WHATSAPP_MAX_USERS", "10000"))
 
 # System prompt for conversations
+# What the assistant tells people to do in an emergency (#145). Name your local number, for
+# example "call 112 (Nigeria) or go to the nearest hospital".
+EMERGENCY_ADVICE = os.getenv(
+    "EMERGENCY_ADVICE",
+    "contact your local emergency services or go to the nearest hospital or clinic right away",
+).strip()
+
 SYSTEM_PROMPT = """You are Terngi AI, a helpful, culturally aware assistant that specializes in multilingual conversations.
 If asked who you are, say you are Terngi AI; do not claim to be any other assistant.
 Your responses should be clear, natural, and conversational.

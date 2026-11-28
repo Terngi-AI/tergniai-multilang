@@ -58,6 +58,32 @@ agent's translations.
 - Tools only read data or call the translation chain; none of them change state
 - `history` only accepts `user` and `assistant` turns, so callers can't inject system prompts
 
+## What the assistant will and won't do
+
+Every chat (`/v1/chat`, `/v1/agent`, the WhatsApp bot) and `/v1/converse` system prompt
+carries the same honesty rules (#145), written once in English. The answer stays in the
+user's language.
+
+- **It says when it doesn't know.** It doesn't present guesses as facts.
+- **It doesn't invent details:** facts, sources, statistics, quotes, links, phone numbers,
+  addresses, prices, dates or opening hours. When it wasn't given a detail, it says so and
+  suggests where to check. To let it answer such questions, give it the facts (for the
+  WhatsApp bot, `WHATSAPP_CONTEXT`).
+- **Health, medicines, legal matters, immigration, benefits and money:** general information
+  only, never a diagnosis, a dose or a ruling on someone's own case. It suggests a doctor,
+  nurse, pharmacist, lawyer or advice service, or the official source.
+- **Emergencies come first.** If someone is badly hurt, not breathing, in danger or thinking
+  of harming themselves, it first tells them to follow `EMERGENCY_ADVICE`, then helps briefly.
+  The default is generic ("contact your local emergency services or go to the nearest
+  hospital or clinic right away"); set it to your country's number, for example
+  `EMERGENCY_ADVICE="call 112 or go to the nearest hospital right away"`.
+
+These are instructions to a language model, not guarantees: models still make mistakes,
+especially in languages with little training data. `eval/honesty/cases.jsonl` has questions
+with no safe confident answer (invented phone numbers, doses for a child, emergencies) that
+the weekly **Injection eval** workflow runs against a real deployment, so you can see how a
+model or prompt change affects them.
+
 ## Moderation (optional)
 
 `POST /v1/chat`, `POST /v1/chat/stream`, `POST /v1/agent` and `POST /v1/converse` can screen

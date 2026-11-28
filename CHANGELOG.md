@@ -6,6 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Honesty rules for the assistant** (#145): every chat, agent and `/v1/converse` prompt now tells the model to say when it doesn't know, never to invent facts, sources, phone numbers, prices or opening hours, to give only general information on health, legal and money questions (no diagnoses or doses) and point to a qualified person, and in an emergency to first send people to `EMERGENCY_ADVICE` (new setting; name your local number). `eval/honesty/cases.jsonl` (26 cases) checks this against a real model in the weekly evaluation. See "What the assistant will and won't do" in `docs/AGENT.md`.
 - **Native-speaker evaluation set** (part of #14): 80 English sentences in 10 everyday
   domains (`data/terngi-eval`), a place for reviewed references in Yoruba, Hausa, Igbo,
   Nigerian Pidgin and Fula, and references collected ahead of provider support for Tiv,
