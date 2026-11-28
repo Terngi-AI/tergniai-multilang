@@ -196,8 +196,15 @@ curl -X POST $BASE/v1/translate -H 'Content-Type: application/json' \
 
 ```json
 {"translated_text": "Ẹ kú àárọ̀, báwo ni ẹbí yín ṣe wà?", "from_language": "en",
- "to_language": "yo", "original_text": "Good morning, how is your family?"}
+ "to_language": "yo", "original_text": "Good morning, how is your family?", "verified": true}
 ```
+
+Every LLM translation is checked before it is returned (#144): numbers must not change (2
+tablets stays 2), links and e-mail addresses must survive, and there must be no added
+"Here is the translation:" or notes. A translation that fails moves on to the next model or
+provider. If none passes, you get the best one with **`"verified": false`**: show it, but
+have someone check it first, especially for health, money or legal text. Unverified results
+are never cached. `/v1/translate/batch` has the same field.
 
 ### Batch translate: `POST /v1/translate/batch`
 

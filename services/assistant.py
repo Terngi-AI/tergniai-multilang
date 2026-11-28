@@ -6,8 +6,9 @@ import json
 from typing import Any, Dict, List, Optional, Tuple
 
 import config
+import metrics
 from services import glossary as glossary_service
-from services import llm, pii
+from services import llm, pii, quality
 from services.glossary import Glossary
 from services.text import normalize_text
 
@@ -70,6 +71,19 @@ def _untranslated(original: str, result: str) -> bool:
     """True when a real sentence came back word for word (names and numbers alone may)"""
     letters = sum(ch.isalpha() for ch in original)
     return letters >= 20 and " " in original.strip() and result.strip() == original.strip()
+
+
+def _check(originals: List[str], results: List[str], to_language: str) -> None:
+    """Reject results that fail an output check (#144), keeping them as fallback candidates"""
+    found = [quality.problems(o, r, to_language) for o, r in zip(originals, results, strict=True)]
+    failed = sorted({name for names in found for name in names})
+    if not failed:
+        return
+    for name in failed:
+        metrics.TRANSLATION_CHECK_FAILURES.labels(name).inc()
+    quality.offer(sum(len(names) for names in found), results)
+    # Only the check names go into the error (and the log): never the text
+    raise ValueError("failed output checks: " + ", ".join(failed))
 
 
 def _non_empty(text: str) -> str:
@@ -166,6 +180,7 @@ async def translate_batch(
                 max_tokens=512,
             )
             translated.append(glossary_service.restore(result, replacements))
+        _check(texts, translated, to_language)
         return translated
 
     system = (
@@ -201,6 +216,7 @@ async def translate_batch(
         for original, result in zip(texts, results, strict=True):
             if _untranslated(original, result):
                 raise ValueError("returned the text untranslated")
+        _check(texts, results, to_language)
         return results
 
     return await llm.complete(
