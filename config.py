@@ -433,6 +433,9 @@ METRICS_TOKEN = os.getenv("METRICS_TOKEN", "")
 # Allows starting with API_KEYS empty (only for local development). In production,
 # leaving auth disabled is refused at startup (see main.check_authentication).
 ALLOW_UNAUTHENTICATED = os.getenv("ALLOW_UNAUTHENTICATED", "false").strip().lower() == "true"
+# A REDIS_URL to a remote host without TLS (redis:// instead of rediss://) refuses to start
+# (#167). Set to true only when the network itself is private, e.g. a VPC you control.
+ALLOW_INSECURE_REDIS = os.getenv("ALLOW_INSECURE_REDIS", "false").strip().lower() == "true"
 
 # Keying secret for personal identifiers (HMAC-SHA256): WhatsApp phone numbers and
 # IP-based conversation owners. Required — the app refuses to start without it, because

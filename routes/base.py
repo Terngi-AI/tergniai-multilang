@@ -12,7 +12,7 @@ import config
 import middleware
 from config import SUPPORTED_LANGUAGES
 from models import UsageResponse, UsageStats
-from services import llm, store, usage
+from services import llm, redis_security, store, usage
 from services.translator import translation_available
 
 router = APIRouter()
@@ -118,6 +118,14 @@ async def ready(request: Request):
     content: Dict[str, object] = {"status": status}
     if not config.API_KEYS or middleware.is_authenticated(request):
         content["services"] = services
+        if config.REDIS_URL:
+            # Whether the connection is encrypted and authenticated, never the URL (#167)
+            connection = redis_security.describe(config.REDIS_URL)
+            content["redis"] = {
+                "network": connection.where,
+                "tls": connection.tls,
+                "auth": connection.auth,
+            }
     return JSONResponse(
         status_code=200 if core_ready else 503,
         content=content,

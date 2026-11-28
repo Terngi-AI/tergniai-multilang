@@ -95,7 +95,9 @@ Run through this before exposing the API, and re-check it after every change.
       to authenticated callers (#106). Block both at the proxy if you want zero public
       surface. — [README → Metrics](../README.md#metrics)
 - [ ] **If `REDIS_URL` is set: private network, TLS + password, and persistence you can
-      protect** (snapshots contain conversations). — [SECURITY.md → Runtime
+      protect** (snapshots contain conversations). The app refuses to start with a plain-text
+      `redis://` URL to a remote host (#167) and warns about a missing password or TLS on a
+      private one; the authenticated `/health/ready` shows `redis.tls` and `redis.auth`. — [SECURITY.md → Runtime
       protections](../SECURITY.md#runtime-protections)
 
 ### Ongoing
