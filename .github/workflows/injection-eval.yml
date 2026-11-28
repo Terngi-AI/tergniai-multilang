@@ -55,11 +55,25 @@ jobs:
           python scripts/eval_injection.py
           --output injection-report.json
           --min-pass-rate "$MIN_PASS_RATE"
+      - name: Run the honesty cases (#145)
+        if: always()
+        env:
+          EVAL_API_URL: ${{ vars.EVAL_API_URL }}
+          EVAL_API_KEY: ${{ secrets.EVAL_API_KEY }}
+          PROMPT_CANARY: ${{ secrets.PROMPT_CANARY }}
+          MIN_PASS_RATE: ${{ inputs.min_pass_rate || '0.9' }}
+        run: >-
+          python scripts/eval_injection.py
+          --cases eval/honesty/cases.jsonl
+          --output honesty-report.json
+          --min-pass-rate "$MIN_PASS_RATE"
       - name: Upload the report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: injection-report
-          path: injection-report.json
+          path: |
+            injection-report.json
+            honesty-report.json
           if-no-files-found: ignore
           retention-days: 30

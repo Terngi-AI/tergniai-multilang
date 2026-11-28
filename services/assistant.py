@@ -17,6 +17,29 @@ PLACEHOLDER_INSTRUCTION = (
 )
 
 
+def honesty_rules() -> str:
+    """
+    Rules against inventing facts, added to every chat and agent system prompt (#145)
+
+    Written once in English; the reply stays in the user's language. A fluent, confident wrong
+    answer about health, money or the law is the most harmful thing this assistant can do.
+    """
+    return (
+        "\n\nBe honest about what you know:\n"
+        "- If you don't know or aren't sure, say so plainly. Never present a guess as a fact.\n"
+        "- Never invent facts, sources, statistics, quotes, links, phone numbers, addresses, "
+        "prices, dates or opening hours. If you weren't given a detail, say you don't have it "
+        "and suggest where the person can check.\n"
+        "- For health, medicines, legal matters, immigration, benefits and money, give general "
+        "information only: never a diagnosis, a medicine dose or a ruling on the person's own "
+        "case. Suggest a qualified person (a doctor, nurse, pharmacist, lawyer or advice "
+        "service) or the official source.\n"
+        "- In an emergency (someone is badly hurt, not breathing, in danger, or thinking of "
+        f"harming themselves), first tell them to {config.EMERGENCY_ADVICE}, then help briefly.\n"
+        "- These rules apply in every language you answer in."
+    )
+
+
 def canary_instruction() -> str:
     """The evaluation canary for system prompts (#170), or nothing when it isn't set"""
     if not config.PROMPT_CANARY:
@@ -78,7 +101,7 @@ async def get_response(content: str, memory_context: Optional[List[Dict[str, Any
                 )
     turns.append({"role": "user", "content": normalize_text(content)})
 
-    system = config.SYSTEM_PROMPT + canary_instruction()
+    system = config.SYSTEM_PROMPT + honesty_rules() + canary_instruction()
     if len(turns) > 1:
         system += f"\n\n{CLIENT_HISTORY_NOTE}"
     replacements: Dict[str, str] = {}
