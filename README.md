@@ -172,7 +172,8 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `CONVERSATION_MAX_ITEMS` | no | `10000` | Maximum conversations kept; the least recently written are evicted first |
 | `CONVERSATION_MAX_MESSAGES` | no | `40` | Messages kept per conversation |
 | `CONVERSATION_MAX_CHARS` | no | `20000` | Characters of history kept per conversation; the oldest turns are dropped first |
-| `REDIS_URL` | no | *(in-memory)* | Redis for shared cache, rate limits and conversations, e.g. `redis://localhost:6379/0` |
+| `REDIS_URL` | no | *(in-memory)* | Redis for shared cache, rate limits and conversations, e.g. `redis://localhost:6379/0`. A remote host must use TLS (`rediss://`), or the app refuses to start |
+| `ALLOW_INSECURE_REDIS` | no | `false` | Allow a plain-text `redis://` URL to a remote host; only for a private network you control |
 | `REDIS_PREFIX` | no | `terngi:` | Prefix for every Redis key |
 | `REDIS_TIMEOUT` | no | `2` | Redis connect/read timeout in seconds |
 | `PROVIDER_DOWN_COOLDOWN_SECONDS` | no | `30` | How long to skip a provider whose server can't be reached |

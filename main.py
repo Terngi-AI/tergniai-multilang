@@ -21,6 +21,7 @@ from config import CORS_ORIGINS, MAX_REQUEST_BYTES
 
 # Import routers
 from routes import agent, base, chat, conversation, feedback, translation, whatsapp
+from services import redis_security
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -51,6 +52,33 @@ def check_authentication() -> None:
 
 
 check_authentication()
+
+
+def check_redis() -> None:
+    """
+    Refuse a plain-text connection to a remote Redis, and warn about weaker setups (#167)
+
+    The URL is never logged: it can contain the password.
+    """
+    if not config.REDIS_URL:
+        return
+    connection = redis_security.describe(config.REDIS_URL)
+    if redis_security.refused(connection):
+        if not config.ALLOW_INSECURE_REDIS:
+            raise SystemExit(
+                "REDIS_URL connects to a remote host without TLS, so conversations and the "
+                "Redis password would cross the network in plain text. Refusing to start. Use "
+                "rediss://, or set ALLOW_INSECURE_REDIS=true only if the network is private."
+            )
+        logger.warning(
+            "ALLOW_INSECURE_REDIS=true: connecting to a remote Redis without TLS. Only do this "
+            "on a private network."
+        )
+    for message in redis_security.warnings(connection):
+        logger.warning(message)
+
+
+check_redis()
 
 
 def check_hash_secret() -> None:

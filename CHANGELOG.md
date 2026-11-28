@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+- **Refuse to start with a plain-text remote Redis** (#167). A `REDIS_URL` using `redis://` to a remote host would send conversations, WhatsApp memory, feedback and the Redis password across the network unencrypted, so the app now refuses to start. Use `rediss://`, or set `ALLOW_INSECURE_REDIS=true` only on a private network you control. A container or private-network host (a name without dots such as the bundled compose stack's `redis`, `*.internal`, or a private IP) still starts, with a warning if it has no TLS or no password. The authenticated `/health/ready` reports `redis.network`, `redis.tls` and `redis.auth`, never the URL. **Upgrading:** check your `REDIS_URL` before deploying.
+
 ### Added
 - **Native-speaker evaluation set** (part of #14): 80 English sentences in 10 everyday
   domains (`data/terngi-eval`), a place for reviewed references in Yoruba, Hausa, Igbo,
