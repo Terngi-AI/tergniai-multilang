@@ -473,6 +473,13 @@ EMERGENCY_ADVICE = os.getenv(
     "contact your local emergency services or go to the nearest hospital or clinic right away",
 ).strip()
 
+# Output checks on every LLM translation (#144): numbers and links kept, no added commentary,
+# a sane length. A failure tries the next model or provider; when none passes, the best
+# result is returned with "verified": false. The ratio is translation length / source length.
+TRANSLATION_CHECKS = os.getenv("TRANSLATION_CHECKS", "true").strip().lower() != "false"
+TRANSLATION_MIN_LENGTH_RATIO = float(os.getenv("TRANSLATION_MIN_LENGTH_RATIO", "0.25"))
+TRANSLATION_MAX_LENGTH_RATIO = float(os.getenv("TRANSLATION_MAX_LENGTH_RATIO", "4"))
+
 SYSTEM_PROMPT = """You are Terngi AI, a helpful, culturally aware assistant that specializes in multilingual conversations.
 If asked who you are, say you are Terngi AI; do not claim to be any other assistant.
 Your responses should be clear, natural, and conversational.

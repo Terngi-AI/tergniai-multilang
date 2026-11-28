@@ -17,7 +17,7 @@ from fastapi import HTTPException
 
 import config
 import metrics
-from services import assistant, azure_translator, deadline, llm, pii
+from services import assistant, azure_translator, deadline, llm, pii, quality
 from services.glossary import Glossary, cache_signature, entries_for
 from services.store import StoreError, make_store
 from services.text import normalize_text
@@ -117,6 +117,15 @@ async def _run_chain(
     raise last_error
 
 
+# Whether the current request's last translate_batch returned an unverified result (#144)
+_unverified: ContextVar[bool] = ContextVar("translation_unverified", default=False)
+
+
+def last_unverified() -> bool:
+    """True when the last translation in this request failed every provider's output checks"""
+    return _unverified.get()
+
+
 def _masked(
     call: Callable[[List[str]], Awaitable[List[str]]], texts: List[str]
 ) -> Callable[[], Awaitable[List[str]]]:
@@ -214,16 +223,38 @@ async def translate_batch(
             )
 
         wrap = _masked if config.PII_MASKING else _unmasked
-        translated = await _run_chain(
-            config.TRANSLATION_PROVIDERS,
-            wrap(azure_call, pending),
-            lambda name: wrap(llm_call(name), pending)(),
-            languages=(from_language, to_language),
-        )
+        unverified = False
+        token = quality.collect()
+        try:
+            translated = await _run_chain(
+                config.TRANSLATION_PROVIDERS,
+                wrap(azure_call, pending),
+                lambda name: wrap(llm_call(name), pending)(),
+                languages=(from_language, to_language),
+            )
+        except HTTPException as e:
+            # Every provider failed; if some only failed the output checks, the best of those
+            # beats an error, as long as the caller is told it is unverified
+            candidate = quality.best_candidate()
+            if e.status_code < 500 or candidate is None:
+                raise
+            logger.warning("No translation passed the output checks; returning the best one")
+            metrics.TRANSLATIONS_UNVERIFIED.inc()
+            translated, unverified = candidate, True
+            if config.PII_MASKING:
+                # Candidates are offered before unmasking; mask again to restore the values
+                masked = [pii.mask(text)[1] for text in pending]
+                translated = [pii.unmask(t, r) for t, r in zip(translated, masked, strict=True)]
+        finally:
+            quality.stop(token)
+        _unverified.set(unverified)
         for i, text in zip(missing, translated, strict=True):
             normalized = normalize_text(text)
             results[i] = normalized
-            await _cache_set(keys[i], normalized)
+            if not unverified:  # never cache a result that failed the checks
+                await _cache_set(keys[i], normalized)
+    else:
+        _unverified.set(False)
 
     return [normalize_text(result or "") for result in results]
 

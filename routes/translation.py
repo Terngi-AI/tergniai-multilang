@@ -16,7 +16,7 @@ from models import (
     TranslationResponse,
 )
 from services.languages import resolve_source_language, validate_language
-from services.translator import detect_language, translate_batch, translate_text
+from services.translator import detect_language, last_unverified, translate_batch, translate_text
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,7 @@ async def translate_text_route(request: TranslationRequest):
             from_language=from_language,
             to_language=request.to_language,
             original_text=request.content,
+            verified=not last_unverified(),
         )
 
     except HTTPException as e:
@@ -76,6 +77,7 @@ async def translate_batch_route(request: BatchTranslationRequest):
             translations=translations,
             from_language=from_language,
             to_language=request.to_language,
+            verified=not last_unverified(),
         )
 
     except HTTPException as e:

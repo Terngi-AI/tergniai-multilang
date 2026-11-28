@@ -29,6 +29,7 @@ def test_translate_success(client):
         "from_language": "en",
         "to_language": "yo",
         "original_text": "Hello",
+        "verified": True,
     }
     assert route.called
     request = route.calls.last.request

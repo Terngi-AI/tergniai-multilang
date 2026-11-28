@@ -202,6 +202,8 @@ All configuration comes from environment variables (see [`.env.example`](.env.ex
 | `RATE_LIMIT_PER_MINUTE` | no | `60` | Requests per minute per client; `0` disables |
 | `AUTH_FAILURES_PER_MINUTE` | no | `10` | Failed API-key attempts allowed per IP per minute; `0` disables |
 | `CACHE_TTL_SECONDS` | no | `3600` | Translation cache lifetime; `0` disables |
+| `TRANSLATION_CHECKS` | no | `true` | Check every LLM translation for changed numbers, lost links and added commentary, and try the next model when one fails ([USAGE.md](docs/USAGE.md#translate-post-v1translate)) |
+| `TRANSLATION_MIN_LENGTH_RATIO` / `TRANSLATION_MAX_LENGTH_RATIO` | no | `0.25` / `4` | A translation shorter or longer than this, relative to the source, fails the checks (the minimum is skipped for Chinese, Japanese and Korean) |
 | `CACHE_MAX_ITEMS` | no | `1000` | Max cached translations |
 | `CACHE_SCOPE` | no | `key` when `API_KEYS` is set, else `global` | `key`: each API key has its own translation cache, so one caller can't tell (from cache timing) whether another caller recently translated a text. `global`: one shared cache for everyone - more quota reuse, no isolation |
 | `MAX_BATCH_SIZE` | no | `25` | Max texts per batch request |

@@ -80,6 +80,15 @@ API_QUOTA_EXCEEDED = Counter(
     ["key"],
 )
 
+TRANSLATION_CHECK_FAILURES = Counter(
+    "terngi_translation_check_failures_total",
+    "LLM translations rejected by an output check (#144), by check",
+    ["check"],
+)
+TRANSLATIONS_UNVERIFIED = Counter(
+    "terngi_translations_unverified_total",
+    "Translations returned unverified because every provider failed the output checks",
+)
 PII_PLACEHOLDERS_LOST = Counter(
     "terngi_pii_placeholders_lost_total",
     "Provider replies rejected because a masked value's placeholder was missing (PII_MASKING)",
